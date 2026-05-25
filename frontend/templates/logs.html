@@ -1,0 +1,489 @@
+{% extends "base.html" %}
+{% block title %}Logs — Nginx UI{% endblock %}
+{% block page_title %}Log Viewer{% endblock %}
+
+{% block extra_head %}
+<style>
+    #log-viewport {
+        height: calc(100vh - 258px);
+        min-height: 340px;
+        overflow: auto;      /* both axes */
+    }
+    #log-table {
+        border-collapse: collapse;
+        min-width: 100%;     /* grow wider than viewport when needed */
+    }
+    #log-table td, #log-table th {
+        white-space: nowrap; /* no wrapping — let table overflow horizontally */
+    }
+    #log-table tr { border-bottom: 1px solid rgba(48,54,61,.8); }
+    #log-table tr:last-child { border-bottom: none; }
+    #log-table tr:hover td { background: rgba(51,65,85,.18) !important; }
+    /* sticky header */
+    #log-thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #161b22;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: #6e7681;
+        border-bottom: 1px solid #30363d;
+        padding: 5px 10px;
+    }
+    /* sticky line-number column on both header and body */
+    .lnum {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background: #0d1117;
+        text-align: right;
+        padding: 3px 10px 3px 6px;
+        color: #484f58;
+        user-select: none;
+        border-right: 1px solid rgba(48,54,61,.5);
+        min-width: 44px;
+    }
+    #log-thead th.lnum { background: #161b22; z-index: 3; }
+    .ldt { padding: 3px 10px; color: #8b949e; min-width: 152px; }
+    .mark-hit { background: rgba(251,191,36,.3); color: inherit; border-radius: 2px; padding: 0 2px; }
+    /* scrollbar styling */
+    #log-viewport::-webkit-scrollbar { width: 7px; height: 7px; }
+    #log-viewport::-webkit-scrollbar-track { background: #0d1117; }
+    #log-viewport::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+    #log-viewport::-webkit-scrollbar-thumb:hover { background: #484f58; }
+    #log-viewport::-webkit-scrollbar-corner { background: #0d1117; }
+    /* filter pills */
+    .filter-pill { padding: 3px 11px; font-size: 11px; font-weight: 600; border-radius: 999px; border: 1px solid transparent; transition: all .15s; cursor: pointer; }
+    .active-pill  { background: #1f2937; color: #f9fafb; border-color: #374151; }
+    .idle-pill    { background: white; border-color: #e5e7eb; }
+    .idle-pill:hover { background: #f9fafb; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Toolbar ─────────────────────────────────────────────────────────────── #}
+<div class="flex flex-wrap gap-2 mb-3 items-center">
+
+    {# Log-type tabs #}
+    <div class="flex rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <button id="btn-access" onclick="switchLog('access')"
+                class="px-4 py-2 text-sm font-semibold transition-colors flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Access Log
+        </button>
+        <button id="btn-error" onclick="switchLog('error')"
+                class="px-4 py-2 text-sm font-semibold transition-colors flex items-center gap-1.5 border-l border-gray-200">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            Error Log
+        </button>
+    </div>
+
+    {# Search #}
+    <div class="relative" style="min-width:200px;max-width:300px;flex:1">
+        <svg class="absolute pointer-events-none" style="left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:#9ca3af"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
+        </svg>
+        <input type="text" id="search-input" placeholder="Search logs…"
+               oninput="render()"
+               class="w-full py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-nginx"
+               style="padding-left:32px;padding-right:28px">
+        <button id="search-clear" onclick="clearSearch()" class="absolute hidden"
+                style="right:8px;top:50%;transform:translateY(-50%);color:#9ca3af;background:none;border:none;cursor:pointer;font-size:16px;line-height:1">&times;</button>
+    </div>
+
+    {# Lines #}
+    <select id="lines-select" onchange="loadLog(currentLog)"
+            class="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-nginx shadow-sm">
+        <option value="50">50 lines</option>
+        <option value="100" selected>100 lines</option>
+        <option value="200">200 lines</option>
+        <option value="500">500 lines</option>
+    </select>
+
+    {# Refresh #}
+    <button onclick="loadLog(currentLog)"
+            class="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition-colors shadow-sm">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Refresh
+    </button>
+
+    {# Auto-refresh #}
+    <label class="inline-flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 cursor-pointer select-none shadow-sm">
+        <input type="checkbox" id="auto-refresh" onchange="toggleAutoRefresh()" style="accent-color:#009639">
+        Auto (10s)
+    </label>
+</div>
+
+{# ── Filter pills + Stats ──────────────────────────────────────────────────── #}
+<div class="flex items-center flex-wrap gap-3 mb-3">
+
+    {# Access status filter #}
+    <div id="access-filters" class="flex items-center gap-1.5">
+        <span class="text-xs text-gray-400 mr-0.5">Status:</span>
+        <button onclick="setFilter('all')" id="fa-all" class="filter-pill active-pill">All</button>
+        <button onclick="setFilter('2xx')" id="fa-2xx" class="filter-pill idle-pill" style="color:#34d399">2xx</button>
+        <button onclick="setFilter('3xx')" id="fa-3xx" class="filter-pill idle-pill" style="color:#60a5fa">3xx</button>
+        <button onclick="setFilter('4xx')" id="fa-4xx" class="filter-pill idle-pill" style="color:#fbbf24">4xx</button>
+        <button onclick="setFilter('5xx')" id="fa-5xx" class="filter-pill idle-pill" style="color:#f87171">5xx</button>
+    </div>
+
+    {# Error level filter #}
+    <div id="error-filters" class="flex items-center gap-1.5" style="display:none">
+        <span class="text-xs text-gray-400 mr-0.5">Level:</span>
+        <button onclick="setFilter('all')"    id="fe-all"    class="filter-pill active-pill">All</button>
+        <button onclick="setFilter('error')"  id="fe-error"  class="filter-pill idle-pill" style="color:#f87171">Error</button>
+        <button onclick="setFilter('warn')"   id="fe-warn"   class="filter-pill idle-pill" style="color:#fbbf24">Warn</button>
+        <button onclick="setFilter('notice')" id="fe-notice" class="filter-pill idle-pill" style="color:#60a5fa">Notice</button>
+        <button onclick="setFilter('info')"   id="fe-info"   class="filter-pill idle-pill" style="color:#34d399">Info</button>
+    </div>
+
+    {# Stats #}
+    <div class="ml-auto flex items-center gap-3 text-xs">
+        <span id="stat-total"   class="text-gray-500"></span>
+        <span id="stat-visible" class="text-gray-500" style="display:none"></span>
+        <span id="stat-errors"  class="font-semibold" style="display:none"></span>
+        <span id="log-updated"  class="text-gray-400"></span>
+    </div>
+</div>
+
+{# ── Log Viewer ────────────────────────────────────────────────────────────── #}
+<div class="rounded-2xl border shadow-2xl" style="border-color:#30363d;background:#0d1117;overflow:hidden">
+
+    {# Terminal title bar #}
+    <div class="flex items-center gap-3 px-4 py-2.5 border-b" style="background:#161b22;border-color:#30363d">
+        <div class="flex gap-1.5">
+            <span class="w-3 h-3 rounded-full" style="background:#f87171;opacity:.7"></span>
+            <span class="w-3 h-3 rounded-full" style="background:#fbbf24;opacity:.7"></span>
+            <span class="w-3 h-3 rounded-full" style="background:#34d399;opacity:.7"></span>
+        </div>
+        <span id="log-filename" class="text-xs font-mono" style="color:#8b949e">access.log</span>
+        <span id="log-updated-bar" class="text-xs ml-auto" style="color:#484f58"></span>
+    </div>
+
+    {# Scrollable area — both axes #}
+    <div id="log-viewport">
+        <table id="log-table" class="font-mono text-xs">
+            <thead id="log-thead"></thead>
+            <tbody id="log-body">
+                <tr><td style="padding:24px;color:#8b949e;text-align:center">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// ── Color maps ────────────────────────────────────────────────────────────────
+const METHOD_COLOR = {
+    GET:'#34d399', POST:'#60a5fa', PUT:'#fbbf24', PATCH:'#a78bfa',
+    DELETE:'#f87171', HEAD:'#22d3ee', OPTIONS:'#94a3b8'
+};
+const LEVEL_BADGE = {
+    emerg: {bg:'#450a0a',fg:'#fca5a5',br:'#991b1b'},
+    alert: {bg:'#450a0a',fg:'#fca5a5',br:'#991b1b'},
+    crit:  {bg:'#450a0a',fg:'#fca5a5',br:'#991b1b'},
+    error: {bg:'#3b0f0f',fg:'#f87171',br:'#7f1d1d'},
+    warn:  {bg:'#3b2907',fg:'#fbbf24',br:'#78350f'},
+    notice:{bg:'#0c1a3b',fg:'#60a5fa',br:'#1e3a8a'},
+    info:  {bg:'#0a2e1a',fg:'#34d399',br:'#065f46'},
+    debug: {bg:'#1e293b',fg:'#94a3b8',br:'#334155'},
+};
+const LEVEL_ROW_BG = {
+    emerg:'rgba(127,29,29,.22)', alert:'rgba(127,29,29,.22)', crit:'rgba(127,29,29,.22)',
+    error:'rgba(127,29,29,.14)', warn:'rgba(120,83,0,.12)',
+};
+const STATUS_FG = s => s>=500?'#f87171': s>=400?'#fbbf24': s>=300?'#60a5fa':'#34d399';
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentLog   = 'access';
+let activeFilter = 'all';
+let allLines     = [];
+let autoTimer    = null;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function hl(text, q) {
+    const s = String(text ?? '');
+    if (!q) return esc(s);
+    const i = s.toLowerCase().indexOf(q.toLowerCase());
+    if (i < 0) return esc(s);
+    return esc(s.slice(0,i)) + '<mark class="mark-hit">' + esc(s.slice(i,i+q.length)) + '</mark>' + esc(s.slice(i+q.length));
+}
+function fmtBytes(b) {
+    if (!b) return '-';
+    if (b >= 1048576) return (b/1048576).toFixed(1)+' MB';
+    if (b >= 1024)    return (b/1024).toFixed(1)+' KB';
+    return b+' B';
+}
+function fmtDt(iso) {
+    if (!iso) return '';
+    try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return iso.replace('T',' ').slice(0,19);
+        const p = n => String(n).padStart(2,'0');
+        // Uses local browser timezone so UTC server logs show correct local time
+        return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ` +
+               `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    } catch {
+        return iso.replace('T',' ').slice(0,19);
+    }
+}
+function shortenRef(ref) {
+    if (!ref || ref === '-') return '-';
+    try { const u = new URL(ref); return u.hostname + (u.pathname !== '/' ? u.pathname.slice(0,28) : ''); }
+    catch { return ref.slice(0,40); }
+}
+
+// ── UA parser ─────────────────────────────────────────────────────────────────
+function parseUA(ua) {
+    if (!ua || ua === '-') return { browser: '-', os: '' };
+    let browser = 'Other';
+    if      (/Googlebot/i.test(ua))                        browser = 'Googlebot';
+    else if (/bingbot|msnbot/i.test(ua))                   browser = 'Bingbot';
+    else if (/curl\//i.test(ua))                           browser = 'curl';
+    else if (/wget\//i.test(ua))                           browser = 'wget';
+    else if (/python-requests|urllib|httpx|aiohttp/i.test(ua)) browser = 'Python';
+    else if (/axios/i.test(ua))                            browser = 'Axios';
+    else if (/Edg\//i.test(ua))                            browser = 'Edge';
+    else if (/OPR\//i.test(ua))                            browser = 'Opera';
+    else if (/YaBrowser/i.test(ua))                        browser = 'Yandex';
+    else if (/SamsungBrowser/i.test(ua))                   browser = 'Samsung';
+    else if (/Firefox\/\d/i.test(ua))                      browser = 'Firefox';
+    else if (/Chrome\/\d/i.test(ua))                       browser = 'Chrome';
+    else if (/Safari\/\d/i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
+    else if (/MSIE|Trident/i.test(ua))                     browser = 'IE';
+
+    let os = '';
+    if      (/Windows NT 10\.0/i.test(ua)) os = 'Win 10/11';
+    else if (/Windows NT/i.test(ua))       os = 'Windows';
+    else if (/iPhone/i.test(ua))           os = 'iPhone';
+    else if (/iPad/i.test(ua))             os = 'iPad';
+    else if (/Android/i.test(ua))          os = 'Android';
+    else if (/Mac OS X/i.test(ua))         os = 'macOS';
+    else if (/Linux/i.test(ua))            os = 'Linux';
+
+    return { browser, os };
+}
+
+// ── Table headers ─────────────────────────────────────────────────────────────
+const TH = t => `<th style="padding:5px 10px">${t}</th>`;
+const ACCESS_THEAD = `<tr>
+    <th class="lnum" style="padding:5px 10px 5px 6px">#</th>
+    ${TH('DateTime')} ${TH('IP Address')} ${TH('Method')}
+    ${TH('Request Path')} ${TH('Status')} ${TH('Size')}
+    ${TH('Browser / OS')} ${TH('Referer')}
+</tr>`;
+const ERROR_THEAD = `<tr>
+    <th class="lnum" style="padding:5px 10px 5px 6px">#</th>
+    ${TH('DateTime')} ${TH('Level')} ${TH('Message')}
+</tr>`;
+
+function renderHeader() {
+    document.getElementById('log-thead').innerHTML =
+        currentLog === 'access' ? ACCESS_THEAD : ERROR_THEAD;
+}
+
+// ── Row renderers ─────────────────────────────────────────────────────────────
+function rowAccess(line, idx, q) {
+    if (line.unparsed) {
+        return `<tr data-s="0">
+          <td class="lnum">${idx+1}</td>
+          <td colspan="8" style="padding:3px 10px;color:#484f58">${hl(line.raw,q)}</td>
+        </tr>`;
+    }
+    const bg  = line.status>=500?'rgba(127,29,29,.12)': line.status>=400?'rgba(120,83,0,.07)':'';
+    const mc  = METHOD_COLOR[line.method] || '#94a3b8';
+    const sc  = STATUS_FG(line.status);
+    const {browser, os} = parseUA(line.ua || '');
+    const client = os ? `${browser} · ${os}` : browser;
+    const ref    = shortenRef(line.referer || '-');
+    return `<tr data-s="${Math.floor(line.status/100)}" style="background:${bg}">
+      <td class="lnum">${idx+1}</td>
+      <td class="ldt">${fmtDt(line.dt_iso) || esc(line.dt_raw||'')}</td>
+      <td style="padding:3px 14px 3px 10px;color:#818cf8">${hl(line.ip,q)}</td>
+      <td style="padding:3px 14px 3px 10px;color:${mc};font-weight:700">${esc(line.method)}</td>
+      <td style="padding:3px 14px 3px 10px;color:#c9d1d9" title="${esc(line.path)}">${hl(line.path,q)}</td>
+      <td style="padding:3px 14px 3px 10px;color:${sc};font-weight:700;text-align:center">${line.status}</td>
+      <td style="padding:3px 14px 3px 10px;color:#484f58;text-align:right">${fmtBytes(line.bytes)}</td>
+      <td style="padding:3px 14px 3px 10px;color:#8b949e;min-width:150px" title="${esc(line.ua||'-')}">${hl(client,q)}</td>
+      <td style="padding:3px 14px 3px 10px;color:#6e7681;min-width:140px" title="${esc(line.referer||'-')}">${hl(ref,q)}</td>
+    </tr>`;
+}
+
+function rowError(line, idx, q) {
+    if (line.unparsed) {
+        return `<tr data-lv="unknown">
+          <td class="lnum">${idx+1}</td>
+          <td colspan="3" style="padding:3px 10px;color:#484f58">${hl(line.raw,q)}</td>
+        </tr>`;
+    }
+    const lv    = line.level || 'info';
+    const b     = LEVEL_BADGE[lv] || LEVEL_BADGE.debug;
+    const rowbg = LEVEL_ROW_BG[lv] || '';
+    const badge = `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:700;
+        background:${b.bg};color:${b.fg};border:1px solid ${b.br}">${esc(lv)}</span>`;
+    return `<tr data-lv="${lv}" style="background:${rowbg}">
+      <td class="lnum">${idx+1}</td>
+      <td class="ldt">${fmtDt(line.dt_iso) || esc(line.dt_raw||'')}</td>
+      <td style="padding:3px 14px 3px 10px;min-width:80px">${badge}</td>
+      <td style="padding:3px 14px 3px 10px;color:#c9d1d9" title="${esc(line.message)}">${hl(line.message,q)}</td>
+    </tr>`;
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+function lineVisible(line) {
+    if (activeFilter === 'all') return true;
+    if (currentLog === 'access') {
+        const s = line.status || 0;
+        if (activeFilter === '2xx') return s >= 200 && s < 300;
+        if (activeFilter === '3xx') return s >= 300 && s < 400;
+        if (activeFilter === '4xx') return s >= 400 && s < 500;
+        if (activeFilter === '5xx') return s >= 500;
+    } else {
+        const lv = line.level || '';
+        if (activeFilter === 'error') return ['error','crit','alert','emerg'].includes(lv);
+        return lv === activeFilter;
+    }
+    return true;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+    const q = document.getElementById('search-input').value.trim();
+    document.getElementById('search-clear').style.display = q ? '' : 'none';
+
+    const fn = currentLog === 'access' ? rowAccess : rowError;
+    const filtered = allLines.filter(line => {
+        if (!lineVisible(line)) return false;
+        if (q && !(line.raw || '').toLowerCase().includes(q.toLowerCase())) return false;
+        return true;
+    });
+
+    renderHeader();
+    const body = document.getElementById('log-body');
+    body.innerHTML = filtered.length
+        ? filtered.map((l, i) => fn(l, i, q)).join('')
+        : `<tr><td colspan="20" style="padding:24px;color:#484f58;text-align:center">${
+            allLines.length ? 'No matching entries' : 'Log is empty'
+          }</td></tr>`;
+
+    updateStats(filtered.length);
+
+    // auto-scroll to bottom only when no search/filter applied
+    if (!q && activeFilter === 'all') {
+        const vp = document.getElementById('log-viewport');
+        vp.scrollTop = vp.scrollHeight;
+    }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function updateStats(visible) {
+    const total = allLines.length;
+    document.getElementById('stat-total').textContent = total + (total === 1 ? ' line' : ' lines');
+
+    const visEl = document.getElementById('stat-visible');
+    if (visible !== total) {
+        visEl.textContent = visible + ' shown'; visEl.style.display = '';
+    } else {
+        visEl.style.display = 'none';
+    }
+
+    const errEl = document.getElementById('stat-errors');
+    if (currentLog === 'access') {
+        const e5 = allLines.filter(l => (l.status||0) >= 500).length;
+        const e4 = allLines.filter(l => (l.status||0) >= 400 && (l.status||0) < 500).length;
+        if (e5)      { errEl.textContent = e5 + ' ×5xx'; errEl.style.color = '#f87171'; errEl.style.display = ''; }
+        else if (e4) { errEl.textContent = e4 + ' ×4xx'; errEl.style.color = '#fbbf24'; errEl.style.display = ''; }
+        else           errEl.style.display = 'none';
+    } else {
+        const ec = allLines.filter(l => ['error','crit','alert','emerg'].includes(l.level)).length;
+        if (ec) { errEl.textContent = ec + ' error' + (ec>1?'s':''); errEl.style.color = '#f87171'; errEl.style.display = ''; }
+        else      errEl.style.display = 'none';
+    }
+}
+
+// ── Tab & filter pill UI ──────────────────────────────────────────────────────
+function updateTabStyles() {
+    const a = currentLog === 'access';
+    document.getElementById('btn-access').style.cssText = a ? 'background:#009639;color:white' : 'background:white;color:#4b5563';
+    document.getElementById('btn-error').style.cssText  = !a ? 'background:#009639;color:white' : 'background:white;color:#4b5563';
+    document.getElementById('access-filters').style.display = a ? '' : 'none';
+    document.getElementById('error-filters').style.display  = a ? 'none' : '';
+    document.getElementById('log-filename').textContent = currentLog + '.log';
+}
+
+function setFilter(f) {
+    activeFilter = f;
+    const prefix = currentLog === 'access' ? 'fa-' : 'fe-';
+    const colors = {'2xx':'#34d399','3xx':'#60a5fa','4xx':'#fbbf24','5xx':'#f87171',
+                    'error':'#f87171','warn':'#fbbf24','notice':'#60a5fa','info':'#34d399'};
+    ['all','2xx','3xx','4xx','5xx','error','warn','notice','info'].forEach(k => {
+        const el = document.getElementById(prefix + k);
+        if (!el) return;
+        if (k === f) { el.className = 'filter-pill active-pill'; el.style.color = ''; }
+        else         { el.className = 'filter-pill idle-pill'; el.style.color = colors[k] || ''; }
+    });
+    render();
+}
+
+function clearSearch() {
+    document.getElementById('search-input').value = '';
+    render();
+}
+
+// ── Load / init ───────────────────────────────────────────────────────────────
+async function loadLog(type) {
+    currentLog   = type;
+    activeFilter = 'all';
+    updateTabStyles();
+    setFilter('all');
+
+    const lines = document.getElementById('lines-select').value;
+    document.getElementById('log-body').innerHTML =
+        '<tr><td colspan="20" style="padding:24px;color:#8b949e;text-align:center">Loading…</td></tr>';
+
+    try {
+        const res = await fetch(`/api/logs/${type}?lines=${lines}`);
+        allLines = await res.json();
+        if (!Array.isArray(allLines)) allLines = [];
+        const ts = new Date().toLocaleTimeString();
+        document.getElementById('log-updated').textContent = 'Updated ' + ts;
+        document.getElementById('log-updated-bar').textContent = ts;
+        render();
+    } catch(e) {
+        document.getElementById('log-body').innerHTML =
+            `<tr><td colspan="20" style="padding:24px;color:#f87171;font-family:monospace;font-size:12px">Error: ${esc(e.message)}</td></tr>`;
+    }
+}
+
+function switchLog(type) { loadLog(type); }
+
+function toggleAutoRefresh() {
+    if (document.getElementById('auto-refresh').checked) {
+        autoTimer = setInterval(() => loadLog(currentLog), 10000);
+    } else {
+        clearInterval(autoTimer);
+        autoTimer = null;
+    }
+}
+
+updateTabStyles();
+loadLog('access');
+</script>
+{% endblock %}

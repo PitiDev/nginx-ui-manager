@@ -1,0 +1,38 @@
+Act as an expert DevOps Engineer and Full-Stack Developer. I need you to build a web-based GUI application to manage Nginx configurations on an Ubuntu server.
+
+1. Core Features Required:
+
+Dashboard: View the current Nginx service status (active/inactive) and system uptime.
+
+Config Manager (CRUD): Create, read, update, and delete Nginx server blocks in /etc/nginx/sites-available.
+
+Toggle Sites: Enable/disable sites by managing symlinks in /etc/nginx/sites-enabled.
+
+Validation & Control: Safely execute sudo nginx -t to validate syntax before saving. Execute sudo systemctl reload nginx to apply changes.
+
+Log Viewer: View the last 100 lines of /var/log/nginx/access.log and error.log.
+
+2. Technical Constraints & Security:
+
+OS: Ubuntu Server.
+
+Stack: Use a lightweight, modern stack (e.g., Python FastAPI or Node.js Express for the backend; HTML/JS/Tailwind for the frontend).
+
+Authentication: The application must be secured with a login screen (username/password) to prevent unauthorized access.
+
+Privileges: Provide instructions on how to safely configure visudo so the application user can only run specific Nginx and systemctl commands as root, rather than running the entire web app as root.
+
+3. Required Output:
+Please provide:
+
+The full directory structure.
+
+The backend code for routing, file I/O, and shell command execution.
+
+The frontend code for the configuration editor and dashboard.
+
+Step-by-step terminal instructions to deploy this on a fresh Ubuntu server.
+
+
+
+

@@ -1,0 +1,526 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Nginx UI{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- ── Nginx Status Hero ──────────────────────────────────────────────────── -->
+<div class="relative overflow-hidden rounded-2xl shadow-lg mb-6 border border-slate-700"
+     style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f2419 100%);">
+    <!-- Subtle grid overlay -->
+    <div class="absolute inset-0 opacity-5"
+         style="background-image: linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);background-size:32px 32px;"></div>
+    <!-- Glow accent -->
+    <div class="absolute -top-10 -right-10 w-64 h-64 rounded-full opacity-10"
+         style="background: radial-gradient(circle, #009639 0%, transparent 70%);"></div>
+
+    <div class="relative px-6 py-5">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+            <!-- Left: Brand + status -->
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg"
+                     style="background: rgba(0,150,57,0.2); border: 1px solid rgba(0,150,57,0.4);">
+                    <svg class="w-7 h-7 text-nginx" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                              d="M5 3l14 9-14 9V3z"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="flex items-center gap-3 mb-1 flex-wrap">
+                        <h2 class="text-white font-bold text-xl tracking-tight">Nginx Web Server</h2>
+                        <!-- status badge -->
+                        <span id="hero-badge"
+                              class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold
+                              {% if status.active %}bg-green-500/20 text-green-300 border border-green-500/30
+                              {% else %}bg-red-500/20 text-red-300 border border-red-500/30{% endif %}">
+                            <span class="relative flex h-2 w-2">
+                                {% if status.active %}
+                                <span id="hero-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span id="hero-dot" class="relative inline-flex rounded-full h-2 w-2 bg-green-400"></span>
+                                {% else %}
+                                <span id="hero-ping" class="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span id="hero-dot" class="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
+                                {% endif %}
+                            </span>
+                            <span id="hero-status">{% if status.active %}Active{% else %}Inactive{% endif %}</span>
+                        </span>
+                    </div>
+                    <p id="hero-version" class="text-slate-400 text-xs font-mono">{{ status.version or 'version unknown' }}</p>
+                </div>
+            </div>
+
+            <!-- Right: key stats -->
+            <div class="flex items-center gap-6 sm:gap-8">
+                <div class="text-center sm:text-right">
+                    <p class="text-slate-500 text-xs uppercase tracking-wider font-semibold mb-0.5">Uptime</p>
+                    <p class="text-white font-bold text-lg leading-tight">{{ status.uptime or '–' }}</p>
+                </div>
+                <div class="w-px h-8 bg-slate-700"></div>
+                <div class="text-center sm:text-right">
+                    <p class="text-slate-500 text-xs uppercase tracking-wider font-semibold mb-0.5">Sites Active</p>
+                    <p class="text-white font-bold text-lg leading-tight">
+                        {{ enabled_sites }}<span class="text-slate-500 font-normal text-sm"> / {{ total_sites }}</span>
+                    </p>
+                </div>
+                <div class="w-px h-8 bg-slate-700"></div>
+                <div class="text-center sm:text-right">
+                    <p class="text-slate-500 text-xs uppercase tracking-wider font-semibold mb-0.5">Last Check</p>
+                    <p id="last-refresh" class="text-slate-300 text-sm font-mono leading-tight">–</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ── System Metrics Row ─────────────────────────────────────────────────── -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+
+    <!-- CPU -->
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">CPU</p>
+                <p id="cpu-pct" class="text-2xl font-bold text-gray-900 mt-0.5">–%</p>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M9 3H7a2 2 0 00-2 2v2M9 3h6M9 3v0M15 3h2a2 2 0 012 2v2M15 3v0M21 9v6M21 9h0M21 15v2a2 2 0 01-2 2h-2M21 15h0M15 21H9M15 21v0M9 21H7a2 2 0 01-2-2v-2M9 21v0M3 15V9M3 15h0M3 9v0"/>
+                </svg>
+            </div>
+        </div>
+        <!-- Ring -->
+        <div class="flex items-center gap-3">
+            <div class="relative flex-shrink-0 w-14 h-14">
+                <svg class="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#eff6ff" stroke-width="3.5"/>
+                    <circle id="cpu-ring" cx="18" cy="18" r="15.9" fill="none"
+                            stroke="#3b82f6" stroke-width="3.5" stroke-linecap="round"
+                            stroke-dasharray="0 100"/>
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <span class="text-xs font-bold text-blue-600" id="cpu-ring-txt">0</span>
+                </div>
+            </div>
+            <div class="min-w-0 flex-1">
+                <p class="text-xs text-gray-400 mb-0.5">Load avg (1m)</p>
+                <p id="cpu-load1" class="text-sm font-semibold text-gray-700 font-mono">–</p>
+                <div class="mt-2 h-1 bg-blue-50 rounded-full overflow-hidden">
+                    <div id="cpu-bar" class="h-full bg-blue-500 rounded-full transition-all duration-700" style="width:0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RAM -->
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Memory</p>
+                <p id="ram-pct" class="text-2xl font-bold text-gray-900 mt-0.5">–%</p>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
+                <svg class="w-5 h-5 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                </svg>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="relative flex-shrink-0 w-14 h-14">
+                <svg class="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f5f3ff" stroke-width="3.5"/>
+                    <circle id="ram-ring" cx="18" cy="18" r="15.9" fill="none"
+                            stroke="#8b5cf6" stroke-width="3.5" stroke-linecap="round"
+                            stroke-dasharray="0 100"/>
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <span class="text-xs font-bold text-violet-600" id="ram-ring-txt">0</span>
+                </div>
+            </div>
+            <div class="min-w-0 flex-1">
+                <p class="text-xs text-gray-400 mb-0.5">Used / Total</p>
+                <p id="ram-used" class="text-sm font-semibold text-gray-700 font-mono truncate">– / –</p>
+                <div class="mt-2 h-1 bg-violet-50 rounded-full overflow-hidden">
+                    <div id="ram-bar" class="h-full bg-violet-500 rounded-full transition-all duration-700" style="width:0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Disk -->
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Disk</p>
+                <p id="disk-pct" class="text-2xl font-bold text-gray-900 mt-0.5">–%</p>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                </svg>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="relative flex-shrink-0 w-14 h-14">
+                <svg class="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#fffbeb" stroke-width="3.5"/>
+                    <circle id="disk-ring" cx="18" cy="18" r="15.9" fill="none"
+                            stroke="#f59e0b" stroke-width="3.5" stroke-linecap="round"
+                            stroke-dasharray="0 100"/>
+                </svg>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <span class="text-xs font-bold text-amber-600" id="disk-ring-txt">0</span>
+                </div>
+            </div>
+            <div class="min-w-0 flex-1">
+                <p class="text-xs text-gray-400 mb-0.5">Used / Total</p>
+                <p id="disk-used" class="text-sm font-semibold text-gray-700 font-mono truncate">– / –</p>
+                <div class="mt-2 h-1 bg-amber-50 rounded-full overflow-hidden">
+                    <div id="disk-bar" class="h-full bg-amber-500 rounded-full transition-all duration-700" style="width:0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network -->
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Network</p>
+                <p id="net-rx-rate" class="text-2xl font-bold text-gray-900 mt-0.5">–</p>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-cyan-50 flex items-center justify-center">
+                <svg class="w-5 h-5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                </svg>
+            </div>
+        </div>
+        <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                    <svg class="w-3 h-3 text-cyan-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 4l-8 8h5v8h6v-8h5z"/>
+                    </svg>
+                    <span class="text-xs text-gray-500">RX</span>
+                </div>
+                <span id="net-rx" class="text-xs font-semibold text-gray-700 font-mono">–/s</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                    <svg class="w-3 h-3 text-orange-400 rotate-180" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 4l-8 8h5v8h6v-8h5z"/>
+                    </svg>
+                    <span class="text-xs text-gray-500">TX</span>
+                </div>
+                <span id="net-tx" class="text-xs font-semibold text-gray-700 font-mono">–/s</span>
+            </div>
+            <div class="h-px bg-gray-100"></div>
+            <div class="flex justify-between text-xs">
+                <span class="text-gray-400">Total RX</span>
+                <span id="net-rx-total" class="font-mono text-gray-600">–</span>
+            </div>
+            <div class="flex justify-between text-xs">
+                <span class="text-gray-400">Total TX</span>
+                <span id="net-tx-total" class="font-mono text-gray-600">–</span>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ── Bottom Row: Sites + Quick Actions + Status ─────────────────────────── -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+
+    <!-- Sites Overview (spans 2/3) -->
+    <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-1 h-5 rounded-full bg-nginx"></div>
+                <h3 class="text-sm font-semibold text-gray-800">Sites Overview</h3>
+            </div>
+            <a href="/configs"
+               class="text-xs font-medium text-nginx hover:text-nginx-dark flex items-center gap-1 transition-colors">
+                Manage
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+            </a>
+        </div>
+        <div class="p-5">
+            <!-- Progress bar -->
+            <div class="flex items-end gap-3 mb-4">
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs text-gray-500 font-medium">Enabled Sites</span>
+                        <span class="text-xs font-bold text-gray-700">{{ enabled_sites }} / {{ total_sites }}</span>
+                    </div>
+                    <div class="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                        {% if total_sites > 0 %}
+                        <div class="h-full bg-nginx rounded-full transition-all duration-700"
+                             style="width: {{ (enabled_sites / total_sites * 100)|int }}%"></div>
+                        {% else %}
+                        <div class="h-full bg-gray-200 rounded-full" style="width:0%"></div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="flex-shrink-0 text-right">
+                    <p class="text-3xl font-black text-nginx leading-none">{{ enabled_sites }}</p>
+                    <p class="text-xs text-gray-400 mt-0.5">active</p>
+                </div>
+            </div>
+
+            <!-- Stats grid -->
+            <div class="grid grid-cols-3 gap-3">
+                <div class="bg-green-50 rounded-xl p-3 text-center">
+                    <p class="text-2xl font-bold text-green-600">{{ enabled_sites }}</p>
+                    <p class="text-xs text-green-600/70 font-medium mt-0.5">Enabled</p>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 text-center">
+                    <p class="text-2xl font-bold text-slate-600">{{ total_sites - enabled_sites }}</p>
+                    <p class="text-xs text-slate-500 font-medium mt-0.5">Disabled</p>
+                </div>
+                <div class="bg-blue-50 rounded-xl p-3 text-center">
+                    <p class="text-2xl font-bold text-blue-600">{{ total_sites }}</p>
+                    <p class="text-xs text-blue-600/70 font-medium mt-0.5">Total</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions (admin only) or Status Card -->
+    {% if current_user and current_user.role == 'admin' %}
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+            <div class="w-1 h-5 rounded-full bg-amber-400"></div>
+            <h3 class="text-sm font-semibold text-gray-800">Quick Actions</h3>
+        </div>
+        <div class="p-4 space-y-2.5">
+            <form method="post" action="/nginx/reload">
+                <button type="submit"
+                        class="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-nginx text-white text-sm font-medium hover:bg-nginx-dark transition-colors shadow-sm">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Reload Nginx
+                </button>
+            </form>
+            <a href="/configs/new"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                New Config
+            </a>
+            <a href="/ssl"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+                SSL Certificates
+            </a>
+            <a href="/logs"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                </svg>
+                View Logs
+            </a>
+            <a href="/users"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                </svg>
+                Manage Users
+            </a>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+            <div class="w-1 h-5 rounded-full bg-blue-400"></div>
+            <h3 class="text-sm font-semibold text-gray-800">Navigation</h3>
+        </div>
+        <div class="p-4 space-y-2.5">
+            <a href="/configs"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                View Configs
+            </a>
+            <a href="/ssl"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+                SSL Certificates
+            </a>
+            <a href="/logs"
+               class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                </svg>
+                View Logs
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- ── systemctl Status Terminal ─────────────────────────────────────────── -->
+{% if status.status_detail %}
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+            <div class="w-1 h-5 rounded-full bg-slate-400"></div>
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <span class="text-sm font-semibold text-gray-700">systemctl status nginx</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+            <div class="w-2.5 h-2.5 rounded-full bg-red-400"></div>
+            <div class="w-2.5 h-2.5 rounded-full bg-amber-400"></div>
+            <div class="w-2.5 h-2.5 rounded-full bg-green-400"></div>
+        </div>
+    </div>
+    <div class="p-4">
+        <pre class="text-xs font-mono text-slate-300 whitespace-pre-wrap rounded-xl p-4 overflow-auto max-h-56 leading-relaxed"
+             style="background:#0d1117;">{{ status.status_detail }}</pre>
+    </div>
+</div>
+{% endif %}
+
+<!-- ── Auto-refresh JS ────────────────────────────────────────────────────── -->
+<script>
+let _prevNet = null, _prevNetTs = null;
+
+function fmtRate(bps) {
+    if (bps < 0 || isNaN(bps)) return '–';
+    if (bps >= 1e6) return (bps / 1e6).toFixed(1) + ' MB/s';
+    if (bps >= 1e3) return (bps / 1e3).toFixed(1) + ' KB/s';
+    return Math.round(bps) + ' B/s';
+}
+
+function fmtBytes(b) {
+    if (b >= 1e9) return (b / 1e9).toFixed(1) + ' GB';
+    if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB';
+    if (b >= 1e3) return (b / 1e3).toFixed(1) + ' KB';
+    return b + ' B';
+}
+
+function set(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+
+function setGauge(ringId, barId, txtId, pct) {
+    const v = Math.min(Math.max(pct, 0), 100).toFixed(1);
+    const ring = document.getElementById(ringId);
+    const bar  = document.getElementById(barId);
+    const txt  = document.getElementById(txtId);
+    if (ring) ring.setAttribute('stroke-dasharray', v + ' 100');
+    if (bar)  bar.style.width = v + '%';
+    if (txt)  txt.textContent = Math.round(v) + '%';
+
+    // Color shift when high usage
+    const high = pct > 85;
+    const colors = { 'cpu-ring': [high ? '#ef4444' : '#3b82f6', high ? '#fee2e2' : '#eff6ff'],
+                     'ram-ring': [high ? '#ef4444' : '#8b5cf6', high ? '#fee2e2' : '#f5f3ff'],
+                     'disk-ring':[high ? '#ef4444' : '#f59e0b', high ? '#fee2e2' : '#fffbeb'] };
+    if (colors[ringId] && ring) {
+        ring.setAttribute('stroke', colors[ringId][0]);
+        const track = ring.previousElementSibling;
+        if (track) track.setAttribute('stroke', colors[ringId][1]);
+    }
+}
+
+async function refresh() {
+    try {
+        const [stats, nginxSt] = await Promise.all([
+            fetch('/api/system/stats').then(r => r.json()),
+            fetch('/api/nginx/status').then(r => r.json()),
+        ]);
+
+        // CPU
+        setGauge('cpu-ring', 'cpu-bar', 'cpu-ring-txt', stats.cpu.percent);
+        set('cpu-pct', stats.cpu.percent.toFixed(1) + '%');
+        set('cpu-load1', stats.cpu.load1.toFixed(2));
+
+        // Memory
+        setGauge('ram-ring', 'ram-bar', 'ram-ring-txt', stats.memory.percent);
+        set('ram-pct', stats.memory.percent.toFixed(1) + '%');
+        set('ram-used',
+            (stats.memory.used_mb >= 1024 ? (stats.memory.used_mb/1024).toFixed(1)+' GB' : stats.memory.used_mb+' MB') +
+            ' / ' +
+            (stats.memory.total_mb >= 1024 ? (stats.memory.total_mb/1024).toFixed(1)+' GB' : stats.memory.total_mb+' MB')
+        );
+
+        // Disk
+        if (stats.disk) {
+            setGauge('disk-ring', 'disk-bar', 'disk-ring-txt', stats.disk.percent);
+            set('disk-pct', stats.disk.percent.toFixed(1) + '%');
+            set('disk-used', stats.disk.used_gb + ' GB / ' + stats.disk.total_gb + ' GB');
+        }
+
+        // Network bandwidth
+        const now = Date.now();
+        if (_prevNet !== null && _prevNetTs !== null) {
+            const dt = (now - _prevNetTs) / 1000;
+            if (dt > 0) {
+                const rx = fmtRate((stats.network.rx_bytes - _prevNet.rx) / dt);
+                const tx = fmtRate((stats.network.tx_bytes - _prevNet.tx) / dt);
+                set('net-rx', rx);
+                set('net-tx', tx);
+                set('net-rx-rate', rx);
+            }
+        }
+        set('net-rx-total', fmtBytes(stats.network.rx_bytes));
+        set('net-tx-total', fmtBytes(stats.network.tx_bytes));
+        _prevNet = { rx: stats.network.rx_bytes, tx: stats.network.tx_bytes };
+        _prevNetTs = now;
+
+        // Nginx status hero
+        const badge = document.getElementById('hero-badge');
+        const dot   = document.getElementById('hero-dot');
+        const ping  = document.getElementById('hero-ping');
+        const txt   = document.getElementById('hero-status');
+        if (nginxSt.active) {
+            if (badge) badge.className = badge.className.replace(/bg-red[^\s]*/g,'').replace(/text-red[^\s]*/g,'').replace(/border-red[^\s]*/g,'')
+                + ' bg-green-500/20 text-green-300 border-green-500/30';
+            if (dot)  dot.className  = 'relative inline-flex rounded-full h-2 w-2 bg-green-400';
+            if (ping) ping.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75';
+            if (txt)  txt.textContent = 'Active';
+        } else {
+            if (badge) badge.className = badge.className.replace(/bg-green[^\s]*/g,'').replace(/text-green[^\s]*/g,'').replace(/border-green[^\s]*/g,'')
+                + ' bg-red-500/20 text-red-300 border-red-500/30';
+            if (dot)  dot.className  = 'relative inline-flex rounded-full h-2 w-2 bg-red-400';
+            if (ping) ping.className = 'absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60';
+            if (txt)  txt.textContent = 'Inactive';
+        }
+
+        // Last refresh time
+        const now2 = new Date();
+        const p = n => String(n).padStart(2,'0');
+        set('last-refresh', p(now2.getHours()) + ':' + p(now2.getMinutes()) + ':' + p(now2.getSeconds()));
+
+    } catch (e) {
+        console.warn('Dashboard refresh error:', e);
+    }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+{% endblock %}

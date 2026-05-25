@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% block title %}About — Nginx UI Pro Manager{% endblock %}
+{% block page_title %}About{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl">
+
+    {# ── Hero ──────────────────────────────────────────────────────────────── #}
+    <div class="relative rounded-3xl overflow-hidden mb-8 shadow-xl"
+         style="background:linear-gradient(135deg,#0f2817 0%,#1a3d28 40%,#0d2b1d 100%)">
+
+        {# decorative rings #}
+        <div class="absolute -right-16 -top-16 w-64 h-64 rounded-full opacity-10"
+             style="border:32px solid #009639"></div>
+        <div class="absolute -right-8 -top-8 w-44 h-44 rounded-full opacity-10"
+             style="border:20px solid #34d399"></div>
+        <div class="absolute -left-12 -bottom-12 w-48 h-48 rounded-full opacity-5"
+             style="border:24px solid #009639"></div>
+
+        <div class="relative px-8 py-10 flex items-center gap-8 flex-wrap">
+            {# Logo #}
+            <div class="w-20 h-20 rounded-2xl flex items-center justify-center shadow-2xl flex-shrink-0"
+                 style="background:linear-gradient(135deg,#009639,#34d399)">
+                <svg class="w-11 h-11 text-white" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+            </div>
+
+            <div>
+                <div class="flex items-center gap-3 mb-1">
+                    <h1 class="text-3xl font-extrabold text-white tracking-tight">Nginx UI</h1>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold text-white"
+                          style="background:rgba(0,150,57,.5);border:1px solid rgba(52,211,153,.4)">Pro</span>
+                </div>
+                <p class="text-lg font-medium mb-3" style="color:#86efac">Pro Manager</p>
+                <p class="text-sm max-w-lg leading-relaxed" style="color:#6ee7b7">
+                    A modern web-based GUI for managing Nginx on Ubuntu servers — built for speed,
+                    security, and real operational use.
+                </p>
+            </div>
+
+            {# Version badge #}
+            <div class="ml-auto flex-shrink-0 text-right hidden sm:block">
+                <p class="text-xs font-semibold mb-1" style="color:#6ee7b7">Version</p>
+                <p class="text-2xl font-extrabold text-white">1.0</p>
+                <p class="text-xs mt-1" style="color:#4ade80">Stable</p>
+            </div>
+        </div>
+    </div>
+
+    {# ── Developer card ────────────────────────────────────────────────────── #}
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-8 flex items-center gap-5">
+        <div class="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 shadow"
+             style="background:linear-gradient(135deg,#1e3a8a,#3b82f6)">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+            </svg>
+        </div>
+        <div>
+            <p class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-0.5">Developed by</p>
+            <p class="text-xl font-bold text-gray-900">Piti Phanthasombath</p>
+            <p class="text-sm text-gray-500 mt-0.5">Full-stack Developer &amp; DevOps Engineer</p>
+        </div>
+        <div class="ml-auto hidden sm:flex flex-col items-end gap-1">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-nginx-light text-nginx border border-green-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-nginx"></span>
+                Open for team use
+            </span>
+        </div>
+    </div>
+
+    {# ── Features grid ─────────────────────────────────────────────────────── #}
+    <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4 text-nginx" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+        </svg>
+        Features
+    </h2>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+
+        {# Dashboard #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                 style="background:#f0fdf4">
+                <svg class="w-5 h-5" style="color:#009639" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10-3a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1v-7z"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">Dashboard &amp; System Monitor</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    Real-time Nginx status, CPU, RAM, and network bandwidth with animated SVG ring gauges.
+                    Auto-refreshes every 5 seconds.
+                </p>
+            </div>
+        </div>
+
+        {# Config Manager #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                 style="background:#eff6ff">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">Config Manager</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    Create, edit, and delete Nginx server blocks in <span class="font-mono">sites-available</span>.
+                    CodeMirror editor with Nginx syntax highlighting, code folding, and <kbd class="px-1 py-0.5 bg-gray-100 rounded text-xs">Ctrl+S</kbd> to save.
+                    Runs <span class="font-mono">nginx -t</span> validation before every save.
+                </p>
+            </div>
+        </div>
+
+        {# Site Toggle #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                 style="background:#fefce8">
+                <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">Site Enable / Disable</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    Toggle sites on and off instantly by managing symlinks in <span class="font-mono">sites-enabled</span>.
+                    Status is reflected live on the config list.
+                </p>
+            </div>
+        </div>
+
+        {# SSL Manager #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                 style="background:#faf5ff">
+                <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">SSL Certificate Manager</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    View expiry dates, days remaining, and status badges for all certificates.
+                    Upload new SSL files via drag-and-drop. Edit <span class="font-mono">.crt</span> and
+                    <span class="font-mono">.key</span> files directly in the browser.
+                </p>
+            </div>
+        </div>
+
+        {# Log Viewer #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                 style="background:#fff7ed">
+                <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">Log Viewer</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    Dark terminal-style viewer for access and error logs. Color-coded by HTTP status
+                    and log level. Live search, status / level filter pills, browser &amp; OS detection
+                    from User-Agent, horizontal scroll, sticky column headers, and auto-refresh.
+                </p>
+            </div>
+        </div>
+
+        {# Nginx Controls #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                 style="background:#f0fdf4">
+                <svg class="w-5 h-5" style="color:#009639" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">Nginx Controls</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    One-click <strong>Reload Nginx</strong> available on every page.
+                    Uses <span class="font-mono">nsenter</span> to reach the host's systemd from inside
+                    the Docker container without privileged socket hacks.
+                </p>
+            </div>
+        </div>
+
+        {# User Management #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                 style="background:#eff6ff">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">User Management &amp; Roles</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    Add, edit, and delete users. Two roles: <strong>Admin</strong> (full access) and
+                    <strong>Viewer</strong> (read-only). Safeguards prevent deleting the last admin
+                    or your own account. Users stored in a JSON file — no database required.
+                </p>
+            </div>
+        </div>
+
+        {# Auth #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                 style="background:#faf5ff">
+                <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">JWT Authentication</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    All routes protected by JWT tokens stored in <span class="font-mono">httpOnly</span> cookies.
+                    Passwords hashed with bcrypt. Configurable token expiry and secret key via environment variables.
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+    {# ── Tech stack ────────────────────────────────────────────────────────── #}
+    <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4 text-nginx" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+        </svg>
+        Tech Stack
+    </h2>
+
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8">
+        <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-gray-100">
+            {% set stack = [
+                ('Backend', 'FastAPI', 'Python 3.12', '#009639'),
+                ('Templates', 'Jinja2', 'Server-side HTML', '#f59e0b'),
+                ('Styling', 'Tailwind CSS', 'CDN v3 (no build)', '#06b6d4'),
+                ('Editor', 'CodeMirror 5', 'Nginx syntax highlight', '#8b5cf6'),
+                ('Auth', 'python-jose', 'JWT + bcrypt', '#ec4899'),
+                ('SSL Parser', 'cryptography', 'X.509 cert info', '#14b8a6'),
+                ('Container', 'Docker', 'linux/amd64', '#2563eb'),
+                ('Web Server', 'Nginx', 'Host managed', '#009639'),
+            ] %}
+            {% for label, name, detail, color in stack %}
+            <div class="px-4 py-4">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{{ label }}</p>
+                <p class="text-sm font-bold text-gray-800" style="color:{{ color }}">{{ name }}</p>
+                <p class="text-xs text-gray-400 mt-0.5">{{ detail }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# ── Deployment info ───────────────────────────────────────────────────── #}
+    <div class="bg-slate-900 rounded-2xl p-6 mb-8 text-sm font-mono">
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Deployment</p>
+        <div class="space-y-1.5 text-slate-300">
+            <div class="flex gap-3">
+                <span class="text-slate-600 w-24 flex-shrink-0">Server</span>
+                <span>Ubuntu Server — 172.16.0.49</span>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-slate-600 w-24 flex-shrink-0">Port</span>
+                <span>8080 (internal network)</span>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-slate-600 w-24 flex-shrink-0">Registry</span>
+                <span style="color:#34d399">devops.laobullionbank.com/piti/nginx-ui</span>
+            </div>
+            <div class="flex gap-3">
+                <span class="text-slate-600 w-24 flex-shrink-0">Runtime</span>
+                <span>Docker — privileged + pid:host for systemd access</span>
+            </div>
+        </div>
+    </div>
+
+    {# ── Footer ────────────────────────────────────────────────────────────── #}
+    <div class="flex items-center justify-between text-xs text-gray-400 pb-2">
+        <span>Nginx UI Pro Manager · v1.0 · 2025</span>
+        <span>Developed with ♥ by <strong class="text-gray-600">Piti Phanthasombath</strong></span>
+    </div>
+
+</div>
+{% endblock %}
