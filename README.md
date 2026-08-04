@@ -8,7 +8,13 @@ A modern web-based GUI for managing Nginx on Ubuntu/Linux servers — built with
 
 ## Overview
 
+A modern, no-build web GUI for managing Nginx on Ubuntu/Linux — config CRUD, site toggling, `nginx -t` validation, SSL certs, log viewing, and live system + traffic monitoring, all from one dashboard.
+
 ![Nginx UI Pro Manager Dashboard](screens/dashboard.png)
+*Dashboard — live Nginx status, CPU / RAM / Disk / Network metrics*
+
+![Nginx UI Pro Manager Traffic Monitor](screens/monitor.png)
+*Traffic Monitor — real-time request activity*
 
 ---
 
