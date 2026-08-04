@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-IMAGE="devops.laobullionbank.com/piti/ticket-app/backend"
+IMAGE="domain.com/piti/nginx-ui"
 VERSION="${1:-latest}"
 
 echo "🚀 Building image: $IMAGE:$VERSION"

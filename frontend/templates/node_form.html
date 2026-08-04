@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if mode == 'edit' else 'Add' }} Node — Nginx UI{% endblock %}
+{% block page_title %}{{ 'Edit' if mode == 'edit' else 'Add' }} Node{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        {% if error %}
+        <div class="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">{{ error }}</div>
+        {% endif %}
+
+        <form method="post"
+              action="{{ '/nodes/' + node.id + '/update' if mode == 'edit' else '/nodes/create' }}">
+
+            <!-- Basic info -->
+            <div class="mb-6">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Node Identity</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Display Name <span class="text-red-400">*</span></label>
+                        <input type="text" name="name" required
+                               value="{{ node.name if node else '' }}"
+                               placeholder="Production Web Server"
+                               class="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Host / IP <span class="text-red-400">*</span></label>
+                        <input type="text" name="host" required
+                               value="{{ node.host if node else '' }}"
+                               placeholder="192.168.1.100"
+                               class="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">SSH Port</label>
+                        <input type="number" name="port" min="1" max="65535"
+                               value="{{ node.port if node else 22 }}"
+                               class="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">SSH Username</label>
+                        <input type="text" name="username"
+                               value="{{ node.username if node else 'root' }}"
+                               placeholder="ubuntu"
+                               class="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auth -->
+            <div class="mb-6">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Authentication</h3>
+
+                <!-- Auth type toggle -->
+                <div class="flex gap-3 mb-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="auth_type" value="password"
+                               {{ 'checked' if not node or node.auth_type == 'password' else '' }}
+                               onchange="setAuthType('password')"
+                               class="text-nginx focus:ring-nginx">
+                        <span class="text-sm text-gray-700">Password</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="auth_type" value="key"
+                               {{ 'checked' if node and node.auth_type == 'key' else '' }}
+                               onchange="setAuthType('key')"
+                               class="text-nginx focus:ring-nginx">
+                        <span class="text-sm text-gray-700">SSH Key</span>
+                    </label>
+                </div>
+
+                <!-- Password section -->
+                <div id="section-password" {{ 'style="display:none"' if node and node.auth_type == 'key' else '' }}>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">
+                        SSH Password
+                        {% if mode == 'edit' %}<span class="text-gray-400">(leave blank to keep existing)</span>{% endif %}
+                    </label>
+                    <input type="password" name="password" autocomplete="new-password"
+                           placeholder="{{ '••••••••' if mode == 'edit' else 'SSH password' }}"
+                           class="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+                </div>
+
+                <!-- Key section -->
+                <div id="section-key" {{ '' if node and node.auth_type == 'key' else 'style="display:none"' }}>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">
+                        Private Key (PEM)
+                        {% if mode == 'edit' %}<span class="text-gray-400">(leave blank to keep existing)</span>{% endif %}
+                    </label>
+                    {% if mode == 'edit' and node and node.auth_type == 'key' and node.ssh_key %}
+                    <div class="flex items-center gap-2 mb-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-xs text-green-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        SSH key stored — paste a new key below to replace it
+                    </div>
+                    {% endif %}
+                    <textarea name="ssh_key" rows="6" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----
+...
+-----END OPENSSH PRIVATE KEY-----"
+                              class="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent resize-y"></textarea>
+                </div>
+            </div>
+
+            <!-- Sudo + nginx paths -->
+            <div class="mb-6">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Remote nginx Paths</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Sudo Password <span class="text-gray-400">(for nginx/systemctl)</span></label>
+                        <input type="password" name="sudo_password" autocomplete="new-password"
+                               placeholder="{{ '••••••••' if mode == 'edit' else 'leave blank if passwordless sudo' }}"
+                               class="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+                    </div>
+                    <div></div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">sites-available path</label>
+                        <input type="text" name="sites_available"
+                               value="{{ node.sites_available if node else '/etc/nginx/sites-available' }}"
+                               class="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">sites-enabled path</label>
+                        <input type="text" name="sites_enabled"
+                               value="{{ node.sites_enabled if node else '/etc/nginx/sites-enabled' }}"
+                               class="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-3 pt-4 border-t border-gray-100">
+                <button type="submit"
+                        class="inline-flex items-center gap-2 px-5 py-2.5 bg-nginx text-white text-sm font-medium rounded-xl hover:bg-nginx-dark transition-colors">
+                    {{ 'Save Changes' if mode == 'edit' else 'Add Node' }}
+                </button>
+                <button type="button" id="test-btn" onclick="testConn()"
+                        class="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors">
+                    <svg id="test-spin" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    Test Connection
+                </button>
+                <a href="/nodes" class="text-sm text-gray-400 hover:text-gray-600 transition-colors ml-auto">Cancel</a>
+            </div>
+        </form>
+
+        <!-- Test result -->
+        <div id="test-result" class="hidden mt-3 px-4 py-3 rounded-xl text-sm font-medium border"></div>
+    </div>
+</div>
+
+<script>
+function setAuthType(type) {
+    document.getElementById('section-password').style.display = type === 'password' ? '' : 'none';
+    document.getElementById('section-key').style.display      = type === 'key'      ? '' : 'none';
+}
+
+async function testConn() {
+    const form = document.querySelector('form');
+    const fd   = new FormData(form);
+    const data = Object.fromEntries(fd.entries());
+    const btn  = document.getElementById('test-btn');
+    const spin = document.getElementById('test-spin');
+    const res  = document.getElementById('test-result');
+
+    spin.classList.remove('hidden');
+    btn.disabled = true;
+    res.classList.add('hidden');
+
+    try {
+        const resp = await fetch('/api/nodes/test-connection', {
+            method:  'POST',
+            headers: {'Content-Type': 'application/json'},
+            body:    JSON.stringify(data),
+        });
+        const d = await resp.json();
+        res.classList.remove('hidden');
+        if (d.ok) {
+            res.className = 'mt-3 px-4 py-3 rounded-xl text-sm font-medium border bg-green-50 border-green-200 text-green-700';
+            res.textContent = 'Connected: ' + (d.msg || 'OK');
+        } else {
+            res.className = 'mt-3 px-4 py-3 rounded-xl text-sm font-medium border bg-red-50 border-red-200 text-red-700';
+            res.textContent = 'Failed: ' + (d.msg || 'Unknown error');
+        }
+    } catch (e) {
+        res.classList.remove('hidden');
+        res.className = 'mt-3 px-4 py-3 rounded-xl text-sm font-medium border bg-red-50 border-red-200 text-red-700';
+        res.textContent = 'Request error: ' + e.message;
+    } finally {
+        spin.classList.add('hidden');
+        btn.disabled = false;
+    }
+}
+</script>
+{% endblock %}

@@ -3,7 +3,7 @@ FROM python:3.12-slim
 # nginx: for nginx -t validation
 # procps: provides ps, uptime (fallback)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends nginx procps \
+    && apt-get install -y --no-install-recommends nginx procps util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

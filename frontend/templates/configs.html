@@ -4,15 +4,25 @@
 
 {% block content %}
 <div class="flex items-center justify-between mb-4">
-    <p class="text-sm text-gray-500">{{ sites | length }} file(s) in sites-available</p>
+    <p class="text-sm text-gray-500">{{ sites | length }} config(s) — enabled ones are edited live in sites-enabled; disabled ones are archived in sites-available</p>
     {% if current_user and current_user.role == 'admin' %}
-    <a href="/configs/new"
-       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-nginx text-white text-sm font-medium rounded-md hover:bg-nginx-dark transition-colors">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-        </svg>
-        New Config
-    </a>
+    <div class="flex items-center gap-2">
+        <a href="/configs/proxy-builder"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-nginx text-nginx text-sm font-medium rounded-md hover:bg-nginx-light transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+            </svg>
+            Proxy Builder
+        </a>
+        <a href="/configs/new"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-nginx text-white text-sm font-medium rounded-md hover:bg-nginx-dark transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            New Config
+        </a>
+    </div>
     {% endif %}
 </div>
 
@@ -33,11 +43,13 @@
                 <td class="px-5 py-3.5 font-mono font-medium text-gray-800">{{ site.name }}</td>
                 <td class="px-5 py-3.5">
                     {% if site.enabled %}
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"
+                          title="Live in sites-enabled">
                         <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Enabled
                     </span>
                     {% else %}
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500"
+                          title="Archived in sites-available">
                         <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Disabled
                     </span>
                     {% endif %}
@@ -49,6 +61,13 @@
                            class="px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
                             View
                         </a>
+
+                        {% if current_user and current_user.role == 'admin' %}
+                        <a href="/configs/proxy-builder?edit={{ site.name }}"
+                           class="px-2.5 py-1 text-xs font-medium bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors">
+                            Builder
+                        </a>
+                        {% endif %}
 
                         {% if current_user and current_user.role == 'admin' %}
                         {% if site.enabled %}
@@ -88,7 +107,7 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
               d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
     </svg>
-    <p class="text-gray-400 text-sm mb-4">No config files found in sites-available</p>
+    <p class="text-gray-400 text-sm mb-4">No config files found</p>
     {% if current_user and current_user.role == 'admin' %}
     <a href="/configs/new"
        class="inline-flex items-center gap-1.5 px-4 py-2 bg-nginx text-white text-sm font-medium rounded-md hover:bg-nginx-dark transition-colors">

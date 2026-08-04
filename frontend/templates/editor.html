@@ -42,7 +42,7 @@
                        class="px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono w-72
                               focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                        required autofocus>
-                <p class="text-xs text-gray-400 mt-1 font-mono">/etc/nginx/sites-available/{name}</p>
+                <p class="text-xs text-gray-400 mt-1 font-mono">/etc/nginx/sites-enabled/{name} — live immediately</p>
             </div>
         </div>
     {% else %}
@@ -55,7 +55,11 @@
                 </svg>
                 <span class="text-sm font-mono font-semibold text-gray-800">{{ name }}</span>
             </div>
-            <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-md font-mono">/etc/nginx/sites-available/</span>
+            {% if enabled %}
+            <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-md font-mono">/etc/nginx/sites-enabled/</span>
+            {% else %}
+            <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-md font-mono">/etc/nginx/sites-available/ (disabled)</span>
+            {% endif %}
         </div>
     {% endif %}
 

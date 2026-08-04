@@ -79,6 +79,61 @@ def _nginx(args: list[str]) -> tuple[bool, str]:
     return _sudo(["nginx"] + effective)
 
 
+def _materialize_if_symlink(name: str) -> None:
+    """Self-heal a legacy sites-enabled/<name> symlink (from the old
+    available-symlinked-into-enabled model) into a real file living directly
+    in sites-enabled, and drop the now-redundant sites-available copy.
+
+    Editing now always happens directly on whatever file nginx actually
+    loads, so a symlink here (working or broken) is legacy state that would
+    otherwise let content silently diverge between the two directories — the
+    exact drift that used to require a manual `ln -sf` to fix.
+    """
+    enabled_path = _safe_path(SITES_ENABLED, name)
+    if enabled_path is None or not enabled_path.is_symlink():
+        return
+    try:
+        if enabled_path.exists():
+            content = enabled_path.read_text()
+            enabled_path.unlink()
+            enabled_path.write_text(content)
+        else:
+            enabled_path.unlink(missing_ok=True)
+    except Exception:
+        return
+    available_path = _safe_path(SITES_AVAILABLE, name)
+    if available_path is not None and available_path.is_file():
+        try:
+            available_path.unlink()
+        except Exception:
+            pass
+
+
+def _migrate_all_legacy_symlinks() -> None:
+    try:
+        for entry in list(SITES_ENABLED.iterdir()):
+            if entry.is_symlink():
+                _materialize_if_symlink(entry.name)
+    except (PermissionError, FileNotFoundError):
+        pass
+
+
+def _locate(name: str) -> Optional[Path]:
+    """Return the path where <name> currently lives.
+
+    sites-enabled (live) takes precedence over sites-available (archived);
+    returns None if the config doesn't exist in either.
+    """
+    _materialize_if_symlink(name)
+    enabled_path = _safe_path(SITES_ENABLED, name)
+    if enabled_path is not None and enabled_path.is_file():
+        return enabled_path
+    available_path = _safe_path(SITES_AVAILABLE, name)
+    if available_path is not None and available_path.is_file():
+        return available_path
+    return None
+
+
 def _get_uptime() -> str:
     try:
         seconds = float(Path("/proc/uptime").read_text().split()[0])
@@ -97,36 +152,66 @@ def _get_uptime() -> str:
 
 
 def _safe_path(base: Path, name: str) -> Optional[Path]:
-    try:
-        resolved = (base / name).resolve()
-        resolved.relative_to(base.resolve())
-        return resolved
-    except (ValueError, OSError):
+    """Join `base / name`, rejecting anything that could escape `base`.
+
+    Deliberately does NOT resolve() the joined path: entries under
+    sites-enabled are meant to be symlinks pointing outside `base` (into
+    sites-available), and resolving would follow the symlink and reject a
+    perfectly valid, already-enabled site as "escaping" the directory.
+    Traversal is instead blocked by rejecting any path separator in `name`.
+    """
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
         return None
+    try:
+        base_resolved = base.resolve()
+    except OSError:
+        return None
+    return base_resolved / name
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+def is_enabled(name: str) -> bool:
+    """True if <name> currently lives in sites-enabled (live), False if it's
+    archived in sites-available or doesn't exist at all."""
+    path = _locate(name)
+    if path is None:
+        return False
+    try:
+        return path.parent == SITES_ENABLED.resolve()
+    except OSError:
+        return False
+
+
 def list_sites() -> list[dict]:
-    sites = []
+    """List every config, merged from both directories.
+
+    sites-enabled holds the live configs nginx actually loads — editing acts
+    on these files directly. sites-available is just an archive of disabled
+    configs, populated only when a site is disabled. A name present in both
+    (e.g. a leftover archived duplicate of a live site) is reported once, as
+    enabled — the live copy always wins.
+    """
+    _migrate_all_legacy_symlinks()
+    sites: dict[str, dict] = {}
     try:
         for entry in sorted(SITES_AVAILABLE.iterdir()):
-            if not entry.is_file():
-                continue
-            enabled_path = SITES_ENABLED / entry.name
-            sites.append({
-                "name": entry.name,
-                "enabled": enabled_path.exists() or enabled_path.is_symlink(),
-                "size": entry.stat().st_size,
-            })
+            if entry.is_file():
+                sites[entry.name] = {"name": entry.name, "enabled": False, "size": entry.stat().st_size}
     except (PermissionError, FileNotFoundError):
         pass
-    return sites
+    try:
+        for entry in sorted(SITES_ENABLED.iterdir()):
+            if entry.is_file():
+                sites[entry.name] = {"name": entry.name, "enabled": True, "size": entry.stat().st_size}
+    except (PermissionError, FileNotFoundError):
+        pass
+    return [sites[name] for name in sorted(sites)]
 
 
 def get_config(name: str) -> Optional[str]:
-    path = _safe_path(SITES_AVAILABLE, name)
-    if path is None or not path.is_file():
+    path = _locate(name)
+    if path is None:
         return None
     try:
         return path.read_text()
@@ -135,11 +220,14 @@ def get_config(name: str) -> Optional[str]:
 
 
 def save_config(name: str, content: str) -> tuple[bool, str]:
-    path = _safe_path(SITES_AVAILABLE, name)
-    if path is None:
-        return False, "Invalid config name"
+    path = _locate(name)
+    is_new = path is None
+    if is_new:
+        # Brand-new configs are created directly in sites-enabled — live immediately.
+        path = _safe_path(SITES_ENABLED, name)
+        if path is None:
+            return False, "Invalid config name"
 
-    is_new = not path.exists()
     old_content: Optional[str] = None
     if not is_new:
         try:
@@ -150,7 +238,7 @@ def save_config(name: str, content: str) -> tuple[bool, str]:
     try:
         path.write_text(content)
     except PermissionError:
-        return False, "Permission denied writing to sites-available."
+        return False, "Permission denied writing config."
 
     ok, output = _nginx(["-t"])
     if not ok:
@@ -167,10 +255,9 @@ def save_config(name: str, content: str) -> tuple[bool, str]:
 
 
 def delete_config(name: str) -> tuple[bool, str]:
-    path = _safe_path(SITES_AVAILABLE, name)
-    if path is None or not path.exists():
+    path = _locate(name)
+    if path is None:
         return False, "Config not found"
-    disable_site(name)
     try:
         path.unlink()
         return True, f"Deleted {name}"
@@ -179,24 +266,33 @@ def delete_config(name: str) -> tuple[bool, str]:
 
 
 def enable_site(name: str) -> tuple[bool, str]:
-    src = _safe_path(SITES_AVAILABLE, name)
-    dst = _safe_path(SITES_ENABLED, name)
-    if src is None or dst is None:
+    """Move <name> from sites-available (archived) into sites-enabled (live)."""
+    _materialize_if_symlink(name)
+    enabled_path = _safe_path(SITES_ENABLED, name)
+    available_path = _safe_path(SITES_AVAILABLE, name)
+    if enabled_path is None or available_path is None:
         return False, "Invalid config name"
-    if not src.exists():
-        return False, "Config not found in sites-available"
-    if dst.exists() or dst.is_symlink():
+    if enabled_path.is_file():
         return False, "Site is already enabled"
+    if not available_path.is_file():
+        return False, "Config not found in sites-available"
 
     try:
-        dst.symlink_to(src)
+        content = available_path.read_text()
+    except Exception as e:
+        return False, f"Could not read archived config: {e}"
+
+    try:
+        enabled_path.write_text(content)
+        available_path.unlink()
     except PermissionError:
-        return False, "Permission denied creating symlink."
+        return False, "Permission denied enabling site."
 
     ok, output = _nginx(["-t"])
     if not ok:
         try:
-            dst.unlink(missing_ok=True)
+            enabled_path.unlink(missing_ok=True)
+            available_path.write_text(content)
         except Exception:
             pass
         return False, f"Enable failed — nginx -t error (reverted):\n{output}"
@@ -205,19 +301,45 @@ def enable_site(name: str) -> tuple[bool, str]:
 
 
 def disable_site(name: str) -> tuple[bool, str]:
-    dst = _safe_path(SITES_ENABLED, name)
-    if dst is None:
+    """Move <name> from sites-enabled (live) into sites-available (archived)."""
+    _materialize_if_symlink(name)
+    enabled_path = _safe_path(SITES_ENABLED, name)
+    available_path = _safe_path(SITES_AVAILABLE, name)
+    if enabled_path is None or available_path is None:
         return False, "Invalid name"
-    if not dst.exists() and not dst.is_symlink():
+    if not enabled_path.is_file():
         return False, "Site is not enabled"
+
     try:
-        dst.unlink()
-        return True, "Site disabled"
+        content = enabled_path.read_text()
+    except Exception as e:
+        return False, f"Could not read config: {e}"
+
+    try:
+        available_path.write_text(content)
+        enabled_path.unlink()
     except PermissionError:
-        return False, "Permission denied removing symlink"
+        return False, "Permission denied disabling site."
+
+    ok, output = _nginx(["-t"])
+    if not ok:
+        try:
+            available_path.unlink(missing_ok=True)
+            enabled_path.write_text(content)
+        except Exception:
+            pass
+        return False, f"Disable failed — nginx -t error (reverted):\n{output}"
+
+    return True, f"Site disabled.\n{output}"
 
 
 def reload_nginx() -> tuple[bool, str]:
+    _migrate_all_legacy_symlinks()
+
+    ok, test_out = _nginx(["-t"])
+    if not ok:
+        return False, f"nginx config test failed — reload aborted:\n{test_out}"
+
     return _systemctl(["reload", "nginx"])
 
 

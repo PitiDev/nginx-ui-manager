@@ -1,0 +1,1229 @@
+{% extends "base.html" %}
+{% block title %}{% if edit_name %}Edit Proxy: {{ edit_name }}{% else %}Proxy Builder{% endif %} — Nginx UI{% endblock %}
+{% block page_title %}{% if edit_name %}Edit Proxy Config{% else %}Proxy Config Builder{% endif %}{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb -->
+<div class="flex items-center gap-1.5 text-sm text-gray-400 mb-5">
+    <a href="/configs" class="hover:text-gray-600 transition-colors">Configs</a>
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+    </svg>
+    <span class="text-gray-700 font-medium">{% if edit_name %}Edit Proxy: {{ edit_name }}{% else %}Proxy Builder{% endif %}</span>
+</div>
+
+<!-- Error toast -->
+<div id="error-toast" style="display:none;"
+     class="fixed top-5 right-5 z-50 px-4 py-3 bg-red-600 text-white text-sm font-medium rounded-xl shadow-lg flex items-center gap-2.5 max-w-sm">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <span id="error-msg"></span>
+</div>
+
+<!-- Tab switcher -->
+<div class="inline-flex items-center gap-1 bg-gray-100 p-1 rounded-xl mb-5">
+    <button id="tab-btn-builder" onclick="showTab('builder')"
+            class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-white shadow-sm text-nginx transition-all">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                  d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10-3a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1v-7z"/>
+        </svg>
+        UI Builder
+    </button>
+    <button id="tab-btn-code" onclick="showTab('code')"
+            class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg text-gray-400 hover:text-gray-600 transition-all">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+        </svg>
+        Code
+    </button>
+</div>
+
+<!-- Builder panel -->
+<div id="panel-builder">
+
+<!-- Two-panel layout -->
+<div class="flex gap-5 items-start">
+
+    <!-- ─── LEFT: Form ────────────────────────────────────────────────────── -->
+    <div style="width:420px;" class="flex-shrink-0 space-y-3">
+
+        <!-- 1. Basic Settings -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2.5">
+                <div class="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <h3 class="text-sm font-semibold text-gray-800">Basic Settings</h3>
+            </div>
+            <div class="p-5 space-y-4">
+
+                <!-- Config name -->
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Config File Name</label>
+                    <input type="text" id="cfg-name" placeholder="mysite" oninput="generate()"
+                           class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent focus:outline-none font-mono bg-gray-50 focus:bg-white transition-colors"/>
+                    <p class="text-xs text-gray-400 mt-1.5">
+                        {% if enabled %}
+                        → sites-enabled/<span id="name-preview" class="font-mono text-gray-600">mysite</span> (live)
+                        {% else %}
+                        → sites-available/<span id="name-preview" class="font-mono text-gray-600">mysite</span> (disabled)
+                        {% endif %}
+                    </p>
+                </div>
+
+                <!-- Server name -->
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Domain / Server Name</label>
+                    <input type="text" id="server-name" placeholder="example.com www.example.com" oninput="generate()"
+                           class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent focus:outline-none bg-gray-50 focus:bg-white transition-colors"/>
+                    <p class="text-xs text-gray-400 mt-1">Space-separated for multiple domains</p>
+                </div>
+
+                <!-- Protocol selector -->
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Listen On</label>
+                    <div class="grid grid-cols-3 gap-2">
+
+                        <div id="proto-http"
+                             class="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-blue-500 bg-blue-50 cursor-pointer select-none transition-all"
+                             onclick="setProto('http')">
+                            <input type="radio" name="protocol" value="http" checked class="hidden"/>
+                            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/>
+                            </svg>
+                            <span class="text-xs font-bold text-blue-600">HTTP</span>
+                            <span class="text-xs text-blue-400">port 80</span>
+                        </div>
+
+                        <div id="proto-https"
+                             class="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-gray-200 bg-white cursor-pointer select-none transition-all hover:border-gray-300"
+                             onclick="setProto('https')">
+                            <input type="radio" name="protocol" value="https" class="hidden"/>
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                            <span class="text-xs font-bold text-gray-500">HTTPS</span>
+                            <span class="text-xs text-gray-400">port 443</span>
+                        </div>
+
+                        <div id="proto-custom"
+                             class="flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-gray-200 bg-white cursor-pointer select-none transition-all hover:border-gray-300"
+                             onclick="setProto('custom')">
+                            <input type="radio" name="protocol" value="custom" class="hidden"/>
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                            </svg>
+                            <span class="text-xs font-bold text-gray-500">Custom</span>
+                            <span class="text-xs text-gray-400">any port</span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Custom port -->
+                <div id="custom-port-row" style="display:none;">
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Port Number</label>
+                    <input type="number" id="custom-port" placeholder="8080" min="1" max="65535" oninput="generate()"
+                           class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent focus:outline-none font-mono bg-gray-50 focus:bg-white transition-colors"/>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 2. SSL -->
+        <div id="ssl-section" style="display:none;"
+             class="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-amber-100 flex items-center gap-2.5"
+                 style="background:linear-gradient(to right,#fffbeb,#fff);">
+                <div class="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                </div>
+                <h3 class="text-sm font-semibold text-gray-800">SSL / TLS</h3>
+                <span class="ml-auto text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">HTTPS only</span>
+            </div>
+            <div class="p-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Certificate Path</label>
+                    <input type="text" id="ssl-cert" placeholder="/etc/ssl/certs/example.com.pem" oninput="generate()"
+                           class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-transparent focus:outline-none font-mono bg-gray-50 focus:bg-white transition-colors"/>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Private Key Path</label>
+                    <input type="text" id="ssl-key" placeholder="/etc/ssl/private/example.com.key" oninput="generate()"
+                           class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-transparent focus:outline-none font-mono bg-gray-50 focus:bg-white transition-colors"/>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">CA Bundle Path <span class="font-normal normal-case text-gray-400">(optional)</span></label>
+                    <input type="text" id="ssl-trusted" placeholder="/etc/ssl/certs/ca-bundle.pem" oninput="generate()"
+                           class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-400 focus:border-transparent focus:outline-none font-mono bg-gray-50 focus:bg-white transition-colors"/>
+                </div>
+                <div class="flex items-center justify-between py-1">
+                    <div>
+                        <p class="text-sm font-medium text-gray-700">Full SSL Hardening</p>
+                        <p class="text-xs text-gray-400 mt-0.5">OCSP stapling, session cache, security headers</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                        <input type="checkbox" id="ssl-full" class="sr-only peer" onchange="generate()"/>
+                        <div class="w-10 h-6 bg-gray-200 rounded-full peer peer-checked:bg-amber-500
+                                    after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                    after:bg-white after:rounded-full after:h-5 after:w-5
+                                    after:transition-all peer-checked:after:translate-x-4"></div>
+                    </label>
+                </div>
+                <div class="flex items-center justify-between py-1">
+                    <div>
+                        <p class="text-sm font-medium text-gray-700">Redirect HTTP → HTTPS</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Adds a port 80 server block that redirects</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                        <input type="checkbox" id="ssl-redirect" class="sr-only peer" checked onchange="generate()"/>
+                        <div class="w-10 h-6 bg-gray-200 rounded-full peer peer-checked:bg-nginx
+                                    after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                    after:bg-white after:rounded-full after:h-5 after:w-5
+                                    after:transition-all peer-checked:after:translate-x-4"></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Upstream / Proxy Locations -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-7 h-7 rounded-lg bg-green-50 flex items-center justify-center">
+                        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-sm font-semibold text-gray-800">Proxy Locations</h3>
+                </div>
+                <button type="button" onclick="addLocation()"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Location
+                </button>
+            </div>
+            <div class="p-4">
+                <p class="text-xs text-gray-400 mb-3">Each row is one <code class="bg-gray-100 px-1 rounded">location</code> block. Path + upstream + optional prefix strip.</p>
+                <div id="locations-container" class="space-y-2"></div>
+            </div>
+        </div>
+
+        <!-- 4. Performance & Options -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2.5">
+                <div class="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                </div>
+                <h3 class="text-sm font-semibold text-gray-800">Performance &amp; Options</h3>
+            </div>
+            <div class="p-5 space-y-4">
+
+                <!-- WebSocket -->
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-700">WebSocket Support</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Adds Upgrade + Connection headers</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                        <input type="checkbox" id="ws-enable" class="sr-only peer" onchange="generate()"/>
+                        <div class="w-10 h-6 bg-gray-200 rounded-full peer peer-checked:bg-violet-500
+                                    after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                    after:bg-white after:rounded-full after:h-5 after:w-5
+                                    after:transition-all peer-checked:after:translate-x-4"></div>
+                    </label>
+                </div>
+
+                <div class="h-px bg-gray-100"></div>
+
+                <!-- Gzip -->
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-700">Gzip Compression</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Compress text, CSS, JS, JSON responses</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                        <input type="checkbox" id="gzip-enable" class="sr-only peer" onchange="generate()"/>
+                        <div class="w-10 h-6 bg-gray-200 rounded-full peer peer-checked:bg-violet-500
+                                    after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                    after:bg-white after:rounded-full after:h-5 after:w-5
+                                    after:transition-all peer-checked:after:translate-x-4"></div>
+                    </label>
+                </div>
+
+                <div class="h-px bg-gray-100"></div>
+
+                <!-- Proxy timeout -->
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Proxy Timeout</label>
+                    <select id="proxy-timeout" onchange="generate()"
+                            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-400 focus:border-transparent focus:outline-none bg-gray-50 focus:bg-white transition-colors">
+                        <option value="">Default (nginx default)</option>
+                        <option value="30">30 seconds</option>
+                        <option value="60" selected>60 seconds</option>
+                        <option value="120">120 seconds</option>
+                        <option value="300">300 seconds</option>
+                        <option value="600">600 seconds</option>
+                    </select>
+                </div>
+
+                <!-- Client max body size -->
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Max Upload Size</label>
+                    <select id="body-size" onchange="generate()"
+                            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-violet-400 focus:border-transparent focus:outline-none bg-gray-50 focus:bg-white transition-colors">
+                        <option value="">Default (1MB)</option>
+                        <option value="10m">10 MB</option>
+                        <option value="50m" selected>50 MB</option>
+                        <option value="100m">100 MB</option>
+                        <option value="500m">500 MB</option>
+                        <option value="0">Unlimited</option>
+                    </select>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 5. Custom Headers -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-7 h-7 rounded-lg bg-cyan-50 flex items-center justify-center">
+                        <svg class="w-4 h-4 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M4 12h16M4 18h7"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-sm font-semibold text-gray-800">Custom Headers</h3>
+                </div>
+                <button type="button" onclick="addHeader()"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cyan-600 bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Header
+                </button>
+            </div>
+            <div class="p-5">
+                <div id="headers-container" class="space-y-2"></div>
+                <p id="no-headers-msg" class="text-xs text-gray-400 text-center py-2">
+                    No custom headers — standard proxy headers are included automatically
+                </p>
+            </div>
+        </div>
+
+    </div>
+    <!-- ─── END LEFT ──────────────────────────────────────────────────────── -->
+
+
+    <!-- ─── RIGHT: Live Preview + Save ──────────────────────────────────── -->
+    <div class="flex-1 min-w-0" style="position: sticky; top: 1rem;">
+
+        <!-- Preview card -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-3">
+            <!-- Terminal chrome -->
+            <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-1.5">
+                        <div class="w-3 h-3 rounded-full bg-red-400"></div>
+                        <div class="w-3 h-3 rounded-full bg-amber-400"></div>
+                        <div class="w-3 h-3 rounded-full bg-green-400"></div>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <span id="preview-filename" class="text-xs font-mono text-gray-400">mysite</span>
+                    </div>
+                    <span class="text-xs text-gray-300">·</span>
+                    <span class="text-xs text-gray-400">nginx config</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="live-badge"
+                          class="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-medium">
+                        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>live
+                    </span>
+                    <button id="copy-btn" onclick="copyConfig()"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                        Copy
+                    </button>
+                </div>
+            </div>
+            <!-- Code -->
+            <div style="background:#0d1117; height:calc(100vh - 340px); min-height:340px; overflow:auto;">
+                <pre id="preview-code"
+                     class="p-5 text-xs font-mono leading-relaxed"
+                     style="min-height:100%; color:#e6edf3;"></pre>
+            </div>
+        </div>
+
+        <!-- Save bar -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
+            <div class="flex items-center gap-3">
+                {% if current_user and current_user.role == 'admin' %}
+                <button onclick="saveConfig()"
+                        class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-nginx text-white text-sm font-semibold rounded-xl hover:bg-nginx-dark transition-colors shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                    </svg>
+                    {% if edit_name %}Update Config{% else %}Save Config{% endif %}
+                </button>
+                <a href="{% if edit_name %}/configs/{{ edit_name }}/edit{% else %}/configs/new{% endif %}"
+                   class="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                    Edit Raw
+                </a>
+                {% else %}
+                <div class="flex-1 flex items-center gap-2 text-sm text-gray-400 bg-gray-50 px-4 py-2.5 rounded-xl">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    Read-only — viewer role cannot save configs
+                </div>
+                {% endif %}
+                <a href="/configs"
+                   class="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 font-medium transition-colors">
+                    Cancel
+                </a>
+            </div>
+        </div>
+
+    </div>
+    <!-- ─── END RIGHT ─────────────────────────────────────────────────────── -->
+
+</div><!-- end two-panel -->
+
+</div><!-- end panel-builder -->
+
+<!-- ─── Code panel ──────────────────────────────────────────────────────── -->
+<div id="panel-code" style="display:none;">
+
+    {% if not edit_name %}
+    <!-- Name input (create mode only) -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-3">
+        <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Config File Name</label>
+        <div class="flex items-center gap-3">
+            <input type="text" id="code-cfg-name" placeholder="mysite" oninput="onCodeNameInput()"
+                   class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-transparent focus:outline-none font-mono bg-gray-50 focus:bg-white transition-colors"/>
+            <span class="text-xs text-gray-400 whitespace-nowrap">→ sites-enabled/<span id="code-name-preview" class="font-mono text-gray-600">mysite</span> (live)</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Editor card -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-3">
+        <!-- Terminal chrome -->
+        <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 rounded-full bg-red-400"></div>
+                    <div class="w-3 h-3 rounded-full bg-amber-400"></div>
+                    <div class="w-3 h-3 rounded-full bg-green-400"></div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <span id="code-preview-filename" class="text-xs font-mono text-gray-400">mysite</span>
+                </div>
+                <span class="text-xs text-gray-300">·</span>
+                <span class="text-xs text-gray-400">nginx config — editable</span>
+            </div>
+            <button id="code-copy-btn" onclick="copyCodeEditor()"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                Copy
+            </button>
+        </div>
+        <!-- Overlay editor: pre (highlighted) + textarea (transparent, on top) -->
+        <div style="background:#0d1117; height:calc(100vh - 320px); min-height:420px; position:relative; overflow:hidden;">
+            <!-- Highlighted render layer -->
+            <pre id="code-highlight" aria-hidden="true"
+                 style="position:absolute;top:0;left:0;right:0;bottom:0;margin:0;padding:1.25rem;
+                        overflow:hidden;pointer-events:none;z-index:1;color:#e6edf3;
+                        font-size:0.75rem;line-height:1.625;
+                        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono',monospace;
+                        white-space:pre;word-wrap:normal;tab-size:4;"></pre>
+            <!-- Editable layer (transparent text so highlight shows through) -->
+            <textarea id="code-editor" spellcheck="false"
+                      style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;
+                             padding:1.25rem;background:transparent;color:transparent;caret-color:#79c0ff;
+                             font-size:0.75rem;line-height:1.625;
+                             font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono',monospace;
+                             white-space:pre;overflow:auto;resize:none;outline:none;border:none;z-index:2;tab-size:4;"
+                      placeholder="# Paste an nginx config here, or switch to UI Builder to generate one…"
+                      oninput="renderCodeEditor()"></textarea>
+        </div>
+        <style>#code-editor::placeholder{color:#4a5568;opacity:1;}</style>
+    </div>
+
+    <!-- Save bar -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
+        <div class="flex items-center gap-3">
+            {% if current_user and current_user.role == 'admin' %}
+            <button onclick="saveConfig()"
+                    class="flex-1 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-nginx text-white text-sm font-semibold rounded-xl hover:bg-nginx-dark transition-colors shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                </svg>
+                {% if edit_name %}Update Config{% else %}Save Config{% endif %}
+            </button>
+            {% else %}
+            <div class="flex-1 flex items-center gap-2 text-sm text-gray-400 bg-gray-50 px-4 py-2.5 rounded-xl">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+                Read-only — viewer role cannot save configs
+            </div>
+            {% endif %}
+            <a href="/configs"
+               class="px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 font-medium transition-colors">
+                Cancel
+            </a>
+        </div>
+    </div>
+
+</div><!-- end panel-code -->
+
+<!-- Hidden submit form -->
+<form id="save-form" method="post"
+      action="{% if edit_name %}/configs/{{ edit_name }}/save{% else %}/configs/create{% endif %}"
+      style="display:none;">
+    <input type="hidden" name="name" id="form-name"/>
+    <textarea name="content" id="form-content"></textarea>
+</form>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let _headerCount = 0;
+let _currentConfig = '';
+
+// ─── Protocol selector ───────────────────────────────────────────────────────
+function setProto(val) {
+    ['http','https','custom'].forEach(p => {
+        const el = document.getElementById('proto-' + p);
+        if (!el) return;
+        if (p === val) {
+            el.className = 'flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-blue-500 bg-blue-50 cursor-pointer select-none transition-all';
+            el.querySelectorAll('span').forEach(s => {
+                s.className = s.className.replace(/text-gray-[45]\d0/g,'').trim();
+                if (s.textContent.match(/^(HTTP|HTTPS|Custom)$/)) s.className += ' text-blue-600 font-bold text-xs';
+                else s.className += ' text-blue-400 text-xs';
+            });
+            el.querySelector('svg').classList.remove('text-gray-400');
+            el.querySelector('svg').classList.add('text-blue-500');
+        } else {
+            el.className = 'flex flex-col items-center gap-1 p-3 rounded-xl border-2 border-gray-200 bg-white cursor-pointer select-none transition-all hover:border-gray-300';
+            el.querySelector('svg').classList.remove('text-blue-500');
+            el.querySelector('svg').classList.add('text-gray-400');
+            el.querySelectorAll('span').forEach(s => {
+                if (s.textContent.match(/^(HTTP|HTTPS|Custom)$/)) s.className = 'text-xs font-bold text-gray-500';
+                else s.className = 'text-xs text-gray-400';
+            });
+        }
+        el.querySelector('input').checked = (p === val);
+    });
+    document.getElementById('ssl-section').style.display   = val === 'https'  ? '' : 'none';
+    document.getElementById('custom-port-row').style.display = val === 'custom' ? '' : 'none';
+    generate();
+}
+
+// ─── Multi-location management ────────────────────────────────────────────────
+let _locCount = 0;
+let _locs     = [];
+
+const _LOC_PROTO_ON  = 'px-2 py-1 text-xs font-bold rounded-lg border-2 border-blue-500 bg-blue-50 text-blue-600 transition-all cursor-pointer';
+const _LOC_PROTO_OFF = 'px-2 py-1 text-xs font-bold rounded-lg border-2 border-gray-200 bg-white text-gray-400 hover:border-gray-300 transition-all cursor-pointer';
+
+function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function addLocation(data) {
+    _locCount++;
+    const id = _locCount;
+    const d  = data || { path: '/', upProto: 'http', upHost: '127.0.0.1', upPort: '3000', strip: false };
+    _locs.push({ id });
+
+    const row = document.createElement('div');
+    row.id = 'loc-row-' + id;
+    row.className = 'rounded-xl border border-gray-200 bg-gray-50/60 p-3 space-y-2';
+    row.innerHTML = `
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-gray-400 w-8 flex-shrink-0">Path</span>
+            <input type="text" id="loc-path-${id}" value="${escHtml(d.path)}" placeholder="/" oninput="generate()"
+                   class="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-1 focus:ring-green-400 focus:outline-none font-mono bg-white"/>
+            <label class="inline-flex items-center gap-1 flex-shrink-0 cursor-pointer select-none text-xs text-gray-500">
+                <input type="checkbox" id="loc-strip-${id}" ${d.strip ? 'checked' : ''} onchange="generate()"
+                       class="w-3 h-3 rounded accent-green-500 cursor-pointer"/>
+                Strip
+            </label>
+            <button id="loc-remove-${id}" type="button" onclick="removeLocation(${id})"
+                    class="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-300 hover:text-red-400 hover:bg-red-50 rounded-lg transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-gray-400 w-8 flex-shrink-0 text-center">→</span>
+            <button id="loc-proto-${id}-http" type="button" onclick="setLocProto(${id},'http')"
+                    class="${d.upProto !== 'https' ? _LOC_PROTO_ON : _LOC_PROTO_OFF}">http</button>
+            <button id="loc-proto-${id}-https" type="button" onclick="setLocProto(${id},'https')"
+                    class="${d.upProto === 'https' ? _LOC_PROTO_ON : _LOC_PROTO_OFF}">https</button>
+            <input type="text" id="loc-host-${id}" value="${escHtml(d.upHost)}" placeholder="127.0.0.1" oninput="generate()"
+                   class="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-1 focus:ring-green-400 focus:outline-none font-mono bg-white"/>
+            <input type="number" id="loc-port-${id}" value="${escHtml(d.upPort)}" placeholder="3000" min="1" max="65535" oninput="generate()"
+                   style="width:62px;" class="px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-1 focus:ring-green-400 focus:outline-none font-mono bg-white"/>
+        </div>`;
+    document.getElementById('locations-container').appendChild(row);
+    _updateRemoveBtns();
+    generate();
+}
+
+function removeLocation(id) {
+    _locs = _locs.filter(l => l.id !== id);
+    document.getElementById('loc-row-' + id)?.remove();
+    _updateRemoveBtns();
+    generate();
+}
+
+function setLocProto(id, proto) {
+    const on  = document.getElementById(`loc-proto-${id}-${proto}`);
+    const off = document.getElementById(`loc-proto-${id}-${proto === 'http' ? 'https' : 'http'}`);
+    if (on)  on.className  = _LOC_PROTO_ON;
+    if (off) off.className = _LOC_PROTO_OFF;
+    generate();
+}
+
+function getLocProto(id) {
+    return document.getElementById(`loc-proto-${id}-https`)?.className.includes('border-blue-500') ? 'https' : 'http';
+}
+
+function _updateRemoveBtns() {
+    const canRemove = _locs.length > 1;
+    _locs.forEach(l => {
+        const btn = document.getElementById('loc-remove-' + l.id);
+        if (btn) btn.style.visibility = canRemove ? '' : 'hidden';
+    });
+}
+
+function getLocations() {
+    return _locs.map(l => ({
+        path:    ((document.getElementById('loc-path-' + l.id)?.value || '/').trim()),
+        upProto: getLocProto(l.id),
+        upHost:  (document.getElementById('loc-host-' + l.id)?.value || '127.0.0.1').trim(),
+        upPort:  (document.getElementById('loc-port-' + l.id)?.value || '3000').trim(),
+        strip:   document.getElementById('loc-strip-' + l.id)?.checked || false,
+    }));
+}
+
+// ─── Custom headers ──────────────────────────────────────────────────────────
+function addHeader() {
+    _headerCount++;
+    const id = _headerCount;
+    const row = document.createElement('div');
+    row.className = 'flex gap-2 items-center';
+    row.id = 'hrow-' + id;
+    row.innerHTML = `
+        <input type="text" id="hname-${id}" placeholder="X-Custom-Header" oninput="generate()"
+               class="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-1 focus:ring-cyan-400 focus:outline-none font-mono bg-gray-50 focus:bg-white"/>
+        <span class="text-gray-300 text-xs flex-shrink-0">:</span>
+        <input type="text" id="hval-${id}" placeholder="value or $variable" oninput="generate()"
+               class="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-1 focus:ring-cyan-400 focus:outline-none font-mono bg-gray-50 focus:bg-white"/>
+        <button type="button" onclick="removeHeader(${id})"
+                class="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-300 hover:text-red-400 hover:bg-red-50 rounded-lg transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>`;
+    document.getElementById('headers-container').appendChild(row);
+    document.getElementById('no-headers-msg').style.display = 'none';
+    generate();
+}
+
+function removeHeader(id) {
+    document.getElementById('hrow-' + id)?.remove();
+    const hasRows = document.querySelectorAll('[id^="hrow-"]').length > 0;
+    document.getElementById('no-headers-msg').style.display = hasRows ? 'none' : '';
+    generate();
+}
+
+function getCustomHeaders() {
+    const headers = [];
+    document.querySelectorAll('[id^="hrow-"]').forEach(row => {
+        const id = row.id.replace('hrow-','');
+        const name = (document.getElementById('hname-'+id)?.value || '').trim();
+        const val  = (document.getElementById('hval-'+id)?.value  || '').trim();
+        if (name && val) headers.push({ name, val });
+    });
+    return headers;
+}
+
+// ─── Config generator ────────────────────────────────────────────────────────
+function getVal(id)     { return (document.getElementById(id)?.value || '').trim(); }
+function isChecked(id)  { return document.getElementById(id)?.checked || false; }
+function radioVal(name) { return document.querySelector(`input[name="${name}"]:checked`)?.value || ''; }
+
+function generate() {
+    const cfgName   = getVal('cfg-name') || 'mysite';
+    const serverName = getVal('server-name') || 'example.com';
+    const proto      = radioVal('protocol') || 'http';
+    const customPort = getVal('custom-port') || '8080';
+
+    const ssl         = proto === 'https';
+    const sslCert     = getVal('ssl-cert') || '/etc/ssl/certs/example.com.pem';
+    const sslKey      = getVal('ssl-key')  || '/etc/ssl/private/example.com.key';
+    const sslRedirect = isChecked('ssl-redirect');
+
+    const ws       = isChecked('ws-enable');
+    const gzip     = isChecked('gzip-enable');
+    const timeout  = getVal('proxy-timeout');
+    const bodySize = getVal('body-size');
+    const headers  = getCustomHeaders();
+    const locs     = getLocations();
+
+    // Update filename displays
+    const fnEl = document.getElementById('preview-filename');
+    if (fnEl) fnEl.textContent = cfgName;
+    const npEl = document.getElementById('name-preview');
+    if (npEl) npEl.textContent = cfgName;
+
+    const L = [];  // lines
+
+    // HTTP → HTTPS redirect block
+    if (ssl && sslRedirect) {
+        L.push('server {');
+        L.push('    listen 80;');
+        L.push(`    server_name ${serverName};`);
+        L.push('');
+        L.push('    # Redirect all HTTP traffic to HTTPS');
+        L.push('    return 301 https://$host$request_uri;');
+        L.push('}');
+        L.push('');
+    }
+
+    // Main server block
+    L.push('server {');
+    if (ssl) {
+        L.push('    listen 443 ssl http2;');
+    } else if (proto === 'custom') {
+        L.push(`    listen ${customPort};`);
+    } else {
+        L.push('    listen 80;');
+    }
+    L.push(`    server_name ${serverName};`);
+    L.push('');
+
+    // SSL
+    if (ssl) {
+        const sslTrusted = getVal('ssl-trusted');
+        const sslFull    = isChecked('ssl-full');
+        L.push(`    ssl_certificate          ${sslCert};`);
+        L.push(`    ssl_certificate_key      ${sslKey};`);
+        if (sslTrusted) L.push(`    ssl_trusted_certificate  ${sslTrusted};`);
+        L.push('    ssl_protocols TLSv1.2 TLSv1.3;');
+        if (sslFull) {
+            L.push("    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256';");
+            L.push('    ssl_prefer_server_ciphers on;');
+            L.push('    ssl_session_timeout 1d;');
+            L.push('    ssl_session_cache shared:SSL:50m;');
+            L.push('    ssl_session_tickets off;');
+            L.push('    ssl_stapling on;');
+            L.push('    ssl_stapling_verify on;');
+            L.push('    resolver 8.8.8.8 8.8.4.4 valid=300s;');
+            L.push('    resolver_timeout 5s;');
+            L.push('    server_tokens off;');
+            L.push('');
+            L.push('    # Security headers');
+            L.push('    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;');
+            L.push('    add_header X-Frame-Options "SAMEORIGIN" always;');
+            L.push('    add_header X-Content-Type-Options "nosniff" always;');
+            L.push('    add_header X-XSS-Protection "1; mode=block" always;');
+        } else {
+            L.push('    ssl_ciphers HIGH:!aNULL:!MD5;');
+            L.push('    ssl_prefer_server_ciphers on;');
+        }
+        L.push('');
+    }
+
+    // Body size
+    if (bodySize) {
+        L.push(`    client_max_body_size ${bodySize};`);
+        L.push('');
+    }
+
+    // Gzip
+    if (gzip) {
+        L.push('    gzip on;');
+        L.push('    gzip_vary on;');
+        L.push('    gzip_types text/plain text/css application/json application/javascript');
+        L.push('               text/xml application/xml text/javascript image/svg+xml;');
+        L.push('');
+    }
+
+    // Location blocks (one per entry)
+    locs.forEach((loc, idx) => {
+        const rawPath = (loc.path || '/').trim();
+        const locPath = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
+        const isRoot  = locPath === '/';
+        const strip   = loc.strip && !isRoot;
+
+        let locDir, ppUrl;
+        if (strip) {
+            const ls = locPath.endsWith('/') ? locPath : locPath + '/';
+            locDir = `location ${ls}`;
+            ppUrl  = `${loc.upProto}://${loc.upHost}:${loc.upPort}/`;
+        } else {
+            locDir = `location ${locPath}`;
+            ppUrl  = `${loc.upProto}://${loc.upHost}:${loc.upPort}`;
+        }
+
+        if (idx > 0) L.push('');
+        L.push(`    ${locDir} {`);
+        L.push(`        proxy_pass ${ppUrl};`);
+        L.push('        proxy_set_header Host              $host;');
+        L.push('        proxy_set_header X-Real-IP         $remote_addr;');
+        L.push('        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;');
+        L.push('        proxy_set_header X-Forwarded-Proto $scheme;');
+
+        if (ws) {
+            L.push('');
+            L.push('        # WebSocket support');
+            L.push('        proxy_http_version 1.1;');
+            L.push('        proxy_set_header Upgrade    $http_upgrade;');
+            L.push('        proxy_set_header Connection "upgrade";');
+        }
+        if (timeout) {
+            L.push('');
+            L.push(`        proxy_read_timeout    ${timeout}s;`);
+            L.push(`        proxy_connect_timeout ${timeout}s;`);
+            L.push(`        proxy_send_timeout    ${timeout}s;`);
+        }
+        if (headers.length) {
+            L.push('');
+            L.push('        # Custom headers');
+            headers.forEach(h => L.push(`        proxy_set_header ${h.name.padEnd(22)} ${h.val};`));
+        }
+        L.push('    }');
+    });
+
+    L.push('}');
+
+    _currentConfig = L.join('\n');
+    renderPreview(_currentConfig);
+}
+
+// ─── Syntax highlighter (DOM-based — no innerHTML injection, no escaping bugs) ─
+function renderHighlight(code, el) {
+    if (!el) return;
+
+    const CLR = {
+        keyword:   '#c792ea',
+        directive: '#82aaff',
+        variable:  '#ffcb6b',
+        string:    '#c3e88d',
+        number:    '#f78c6c',
+        url:       '#f78c6c',
+        comment:   '#6a9955',
+        brace:     '#909090',
+    };
+
+    function mkSpan(text, color, italic) {
+        const s = document.createElement('span');
+        s.textContent = text;
+        s.style.color = color;
+        if (italic) s.style.fontStyle = 'italic';
+        return s;
+    }
+
+    // Walk a raw value string and append colored child nodes to `parent`
+    function appendValue(parent, raw) {
+        let i = 0, plain = '';
+        const flush = () => {
+            if (plain) { parent.appendChild(document.createTextNode(plain)); plain = ''; }
+        };
+        while (i < raw.length) {
+            const rest = raw.slice(i);
+            // $variable
+            const varM = rest.match(/^\$[a-z_][a-z_0-9]*/);
+            if (varM) { flush(); parent.appendChild(mkSpan(varM[0], CLR.variable)); i += varM[0].length; continue; }
+            // URL (https?://) — stop at whitespace or ;
+            const urlM = rest.match(/^https?:\/\/[^\s;]*/);
+            if (urlM) { flush(); parent.appendChild(mkSpan(urlM[0], CLR.url)); i += urlM[0].length; continue; }
+            // Quoted string
+            if (raw[i] === '"') {
+                const end = raw.indexOf('"', i + 1);
+                const q   = end < 0 ? raw.slice(i) : raw.slice(i, end + 1);
+                flush(); parent.appendChild(mkSpan(q, CLR.string)); i += q.length; continue;
+            }
+            // Standalone number (preceded by non-digit, followed by non-digit)
+            const numM = rest.match(/^\d+[smkMG]?/);
+            if (numM && (i === 0 || /[^0-9]/.test(raw[i - 1])) && /[^0-9a-zA-Z]|$/.test(raw[i + numM[0].length] || '')) {
+                flush(); parent.appendChild(mkSpan(numM[0], CLR.number)); i += numM[0].length; continue;
+            }
+            plain += raw[i++];
+        }
+        flush();
+    }
+
+    const frag = document.createDocumentFragment();
+
+    code.split('\n').forEach(line => {
+        const trimmed = line.trimStart();
+        const indent  = line.slice(0, line.length - trimmed.length);
+
+        if (indent) frag.appendChild(document.createTextNode(indent));
+
+        if (!trimmed) { frag.appendChild(document.createTextNode('\n')); return; }
+
+        // Comment
+        if (trimmed.startsWith('#')) {
+            frag.appendChild(mkSpan(trimmed, CLR.comment, true));
+            frag.appendChild(document.createTextNode('\n'));
+            return;
+        }
+
+        // Closing brace
+        if (trimmed === '}') {
+            frag.appendChild(mkSpan('}', CLR.brace));
+            frag.appendChild(document.createTextNode('\n'));
+            return;
+        }
+
+        // Block opener: server { / location /path {
+        const blockM = trimmed.match(/^(server|location|upstream|events)\b(.*?)(\{)\s*$/);
+        if (blockM) {
+            frag.appendChild(mkSpan(blockM[1], CLR.keyword));
+            if (blockM[2]) appendValue(frag, blockM[2]);
+            frag.appendChild(mkSpan('{', CLR.brace));
+            frag.appendChild(document.createTextNode('\n'));
+            return;
+        }
+
+        // Directive: first word + value
+        const dirM = trimmed.match(/^([a-z_][a-z0-9_-]*)(\s+)(.+?)(;?\s*)$/);
+        if (dirM) {
+            frag.appendChild(mkSpan(dirM[1], CLR.directive));
+            frag.appendChild(document.createTextNode(dirM[2]));
+            const valWrap = document.createElement('span');
+            appendValue(valWrap, dirM[3]);
+            frag.appendChild(valWrap);
+            if (dirM[4]) frag.appendChild(mkSpan(dirM[4], CLR.brace));
+            frag.appendChild(document.createTextNode('\n'));
+            return;
+        }
+
+        // Fallback
+        frag.appendChild(document.createTextNode(trimmed + '\n'));
+    });
+
+    el.innerHTML = '';
+    el.appendChild(frag);
+}
+
+function renderPreview(code) {
+    renderHighlight(code, document.getElementById('preview-code'));
+}
+
+function renderCodeEditor() {
+    const ta  = document.getElementById('code-editor');
+    const pre = document.getElementById('code-highlight');
+    if (!ta || !pre) return;
+    renderHighlight(ta.value, pre);
+    // Keep highlight layer scrolled in sync with textarea
+    pre.scrollTop  = ta.scrollTop;
+    pre.scrollLeft = ta.scrollLeft;
+}
+
+// ─── Copy ────────────────────────────────────────────────────────────────────
+function copyConfig() {
+    if (!_currentConfig) return;
+    navigator.clipboard.writeText(_currentConfig).then(() => {
+        const btn = document.getElementById('copy-btn');
+        if (!btn) return;
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<svg class="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Copied!';
+        btn.classList.add('text-green-600','bg-green-50');
+        setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('text-green-600','bg-green-50'); }, 2000);
+    });
+}
+
+// ─── Validate & Save ─────────────────────────────────────────────────────────
+function showError(msg) {
+    const toast = document.getElementById('error-toast');
+    document.getElementById('error-msg').textContent = msg;
+    toast.style.display = 'flex';
+    setTimeout(() => { toast.style.display = 'none'; }, 4000);
+}
+
+function saveConfig() {
+    if (_currentTab === 'code') {
+        const codeContent = (document.getElementById('code-editor')?.value || '').trim();
+        if (codeContent) _currentConfig = codeContent;
+        const codeName = document.getElementById('code-cfg-name');
+        if (codeName) setVal('cfg-name', codeName.value);
+    }
+    const name = getVal('cfg-name');
+    if (!name) { showError('Config file name is required.'); return; }
+    if (name.includes('/') || name.startsWith('.')) {
+        showError("Name cannot contain '/' or start with '.'"); return;
+    }
+    if (!getVal('server-name')) { showError('Domain / Server Name is required.'); return; }
+    const locs = getLocations();
+    if (!locs.length || !locs[0].upHost) { showError('At least one upstream host is required.'); return; }
+
+    const proto = radioVal('protocol');
+    if (proto === 'https') {
+        if (!getVal('ssl-cert')) { showError('SSL certificate path is required for HTTPS.'); return; }
+        if (!getVal('ssl-key'))  { showError('SSL key path is required for HTTPS.'); return; }
+    }
+    if (proto === 'custom' && !getVal('custom-port')) {
+        showError('Custom port number is required.'); return;
+    }
+
+    document.getElementById('form-name').value    = name;
+    document.getElementById('form-content').value = _currentConfig;
+    document.getElementById('save-form').submit();
+}
+
+// ─── Tab state ───────────────────────────────────────────────────────────────
+let _currentTab = 'builder';
+
+const _TAB_ACTIVE   = 'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-white shadow-sm text-nginx transition-all';
+const _TAB_INACTIVE = 'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg text-gray-400 hover:text-gray-600 transition-all';
+
+function showTab(tab) {
+    const builderPanel = document.getElementById('panel-builder');
+    const codePanel    = document.getElementById('panel-code');
+    const builderBtn   = document.getElementById('tab-btn-builder');
+    const codeBtn      = document.getElementById('tab-btn-code');
+
+    if (tab === 'builder') {
+        // Sync code editor → form if coming from code tab
+        if (_currentTab === 'code') {
+            const codeContent = (document.getElementById('code-editor')?.value || '').trim();
+            if (codeContent) {
+                _currentConfig = codeContent;
+                const codeName = document.getElementById('code-cfg-name');
+                if (codeName) setVal('cfg-name', codeName.value);
+                populateForm(parseNginxConfig(codeContent));
+            }
+        }
+        builderPanel.style.display = '';
+        codePanel.style.display    = 'none';
+        builderBtn.className = _TAB_ACTIVE;
+        codeBtn.className    = _TAB_INACTIVE;
+    } else {
+        // Sync form → code editor
+        const editor = document.getElementById('code-editor');
+        if (editor) editor.value = _currentConfig;
+        const codeName = document.getElementById('code-cfg-name');
+        if (codeName) codeName.value = getVal('cfg-name');
+        const fnEl = document.getElementById('code-preview-filename');
+        if (fnEl) fnEl.textContent = getVal('cfg-name') || 'mysite';
+        const cnPrev = document.getElementById('code-name-preview');
+        if (cnPrev) cnPrev.textContent = getVal('cfg-name') || 'mysite';
+
+        builderPanel.style.display = 'none';
+        codePanel.style.display    = '';
+        builderBtn.className = _TAB_INACTIVE;
+        codeBtn.className    = _TAB_ACTIVE;
+        // Render syntax highlighting in the code editor
+        renderCodeEditor();
+    }
+    _currentTab = tab;
+}
+
+function copyCodeEditor() {
+    const editor = document.getElementById('code-editor');
+    if (!editor) return;
+    navigator.clipboard.writeText(editor.value).then(() => {
+        const btn = document.getElementById('code-copy-btn');
+        if (!btn) return;
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<svg class="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Copied!';
+        btn.classList.add('text-green-600', 'bg-green-50');
+        setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('text-green-600', 'bg-green-50'); }, 2000);
+    });
+}
+
+function onCodeNameInput() {
+    const codeName = document.getElementById('code-cfg-name');
+    if (!codeName) return;
+    const val = codeName.value;
+    setVal('cfg-name', val);
+    const prev1 = document.getElementById('code-name-preview');
+    if (prev1) prev1.textContent = val || 'mysite';
+    const prev2 = document.getElementById('code-preview-filename');
+    if (prev2) prev2.textContent = val || 'mysite';
+    const prev3 = document.getElementById('preview-filename');
+    if (prev3) prev3.textContent = val || 'mysite';
+    const prev4 = document.getElementById('name-preview');
+    if (prev4) prev4.textContent = val || 'mysite';
+}
+
+// ─── Form helpers ────────────────────────────────────────────────────────────
+function setVal(id, value)    { const el = document.getElementById(id); if (el) el.value = value; }
+function setCheck(id, state)  { const el = document.getElementById(id); if (el) el.checked = state; }
+function setSelectVal(id, v)  { const el = document.getElementById(id); if (!el) return; el.value = v; if (el.value !== v) el.value = ''; }
+
+// ─── Parse existing nginx config into form-data object ────────────────────────
+function parseNginxConfig(content) {
+    const data = {
+        serverName: '', proto: 'http', customPort: '',
+        sslCert: '', sslKey: '', sslTrusted: '', sslRedirect: true, sslFull: false,
+        locations: [],
+        wsEnable: false, gzipEnable: false,
+        proxyTimeout: '', bodySize: '',
+        headers: [],
+    };
+
+    const m = (re) => { const r = content.match(re); return r ? r[1].trim() : null; };
+
+    // server_name
+    const sn = m(/server_name\s+(.+?);/); if (sn) data.serverName = sn;
+
+    // listen / protocol
+    if (content.includes('listen 443')) {
+        data.proto = 'https';
+        data.sslRedirect = /server\s*\{[^}]*listen\s+80[;\s][^}]*return\s+301/s.test(content);
+    } else {
+        const port = m(/^\s*listen\s+(\d+)/m);
+        if (port && port !== '80') { data.proto = 'custom'; data.customPort = port; }
+        else data.proto = 'http';
+    }
+
+    // SSL certs
+    const cert = m(/ssl_certificate(?!_key)\s+(.+?);/); if (cert) data.sslCert = cert;
+    const key  = m(/ssl_certificate_key\s+(.+?);/);     if (key)  data.sslKey  = key;
+    const tru  = m(/ssl_trusted_certificate\s+(.+?);/); if (tru)  data.sslTrusted = tru;
+    if (content.includes('ssl_stapling on')) data.sslFull = true;
+
+    // All location blocks with their proxy_pass
+    const locMatches = [...content.matchAll(/location\s+([^\s{]+)\s*\{([^}]+)\}/gs)];
+    data.locations = locMatches.map(m2 => {
+        const rawPath = m2[1].replace(/\/$/, '') || '/';
+        const body    = m2[2];
+        const ppM     = body.match(/proxy_pass\s+(https?:\/\/[^\s;]+)/);
+        if (!ppM) return null;
+        try {
+            const u = new URL(ppM[1]);
+            return {
+                path:    rawPath,
+                upProto: u.protocol.replace(':', ''),
+                upHost:  u.hostname,
+                upPort:  u.port || (u.protocol === 'https:' ? '443' : '80'),
+                strip:   ppM[1].endsWith('/') && rawPath !== '/',
+            };
+        } catch (_) { return null; }
+    }).filter(Boolean);
+    if (data.locations.length === 0) {
+        data.locations = [{ path: '/', upProto: 'http', upHost: '127.0.0.1', upPort: '3000', strip: false }];
+    }
+
+    // options
+    if (content.includes('proxy_set_header Upgrade')) data.wsEnable = true;
+    if (content.includes('gzip on'))                   data.gzipEnable = true;
+
+    const to = m(/proxy_read_timeout\s+(\d+)s/); if (to) data.proxyTimeout = to;
+    const bs = m(/client_max_body_size\s+(\S+?);/); if (bs) data.bodySize = bs;
+
+    // custom headers (non-standard ones)
+    const std = new Set(['Host','X-Real-IP','X-Forwarded-For','X-Forwarded-Proto','Upgrade','Connection']);
+    for (const hm of content.matchAll(/proxy_set_header\s+(\S+)\s+(.+?);/g)) {
+        if (!std.has(hm[1])) data.headers.push({ name: hm[1], val: hm[2].trim() });
+    }
+
+    return data;
+}
+
+// ─── Populate form from parsed data ──────────────────────────────────────────
+function populateForm(data) {
+    setVal('server-name', data.serverName);
+    setProto(data.proto);
+    if (data.proto === 'custom') setVal('custom-port', data.customPort);
+
+    setVal('ssl-cert',     data.sslCert);
+    setVal('ssl-key',      data.sslKey);
+    setVal('ssl-trusted',  data.sslTrusted);
+    setCheck('ssl-redirect', data.sslRedirect);
+    setCheck('ssl-full',     data.sslFull);
+
+    // Locations
+    document.getElementById('locations-container').innerHTML = '';
+    _locs = []; _locCount = 0;
+    (data.locations.length ? data.locations : [{ path: '/', upProto: 'http', upHost: '127.0.0.1', upPort: '3000', strip: false }])
+        .forEach(loc => addLocation(loc));
+
+    setCheck('ws-enable',   data.wsEnable);
+    setCheck('gzip-enable', data.gzipEnable);
+    setSelectVal('proxy-timeout', data.proxyTimeout);
+    setSelectVal('body-size',     data.bodySize);
+
+    data.headers.forEach(h => {
+        addHeader();
+        const id = _headerCount;
+        setVal('hname-' + id, h.name);
+        setVal('hval-' + id, h.val);
+    });
+
+    generate();
+}
+
+// ─── Scroll sync: keep highlight pre in lockstep with the textarea ───────────
+document.addEventListener('scroll', function (e) {
+    if (e.target && e.target.id === 'code-editor') {
+        const pre = document.getElementById('code-highlight');
+        if (pre) { pre.scrollTop = e.target.scrollTop; pre.scrollLeft = e.target.scrollLeft; }
+    }
+}, true);
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+{% if edit_name %}
+(function () {
+    const editName = {{ edit_name | tojson }};
+    const raw      = {{ config_content | tojson }};
+    // Lock the name field
+    const cfgEl = document.getElementById('cfg-name');
+    if (cfgEl) {
+        cfgEl.value = editName;
+        cfgEl.readOnly = true;
+        cfgEl.classList.add('bg-gray-100', 'cursor-not-allowed');
+    }
+    populateForm(parseNginxConfig(raw));
+})();
+{% else %}
+addLocation();   // seed one default location row
+{% endif %}
+</script>
+{% endblock %}

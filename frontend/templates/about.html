@@ -3,13 +3,11 @@
 {% block page_title %}About{% endblock %}
 
 {% block content %}
-<div class="max-w-4xl">
+<div class="max-w-5xl">
 
     {# ── Hero ──────────────────────────────────────────────────────────────── #}
     <div class="relative rounded-3xl overflow-hidden mb-8 shadow-xl"
          style="background:linear-gradient(135deg,#0f2817 0%,#1a3d28 40%,#0d2b1d 100%)">
-
-        {# decorative rings #}
         <div class="absolute -right-16 -top-16 w-64 h-64 rounded-full opacity-10"
              style="border:32px solid #009639"></div>
         <div class="absolute -right-8 -top-8 w-44 h-44 rounded-full opacity-10"
@@ -18,14 +16,12 @@
              style="border:24px solid #009639"></div>
 
         <div class="relative px-8 py-10 flex items-center gap-8 flex-wrap">
-            {# Logo #}
             <div class="w-20 h-20 rounded-2xl flex items-center justify-center shadow-2xl flex-shrink-0"
                  style="background:linear-gradient(135deg,#009639,#34d399)">
                 <svg class="w-11 h-11 text-white" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
             </div>
-
             <div>
                 <div class="flex items-center gap-3 mb-1">
                     <h1 class="text-3xl font-extrabold text-white tracking-tight">Nginx UI</h1>
@@ -33,17 +29,16 @@
                           style="background:rgba(0,150,57,.5);border:1px solid rgba(52,211,153,.4)">Pro</span>
                 </div>
                 <p class="text-lg font-medium mb-3" style="color:#86efac">Pro Manager</p>
-                <p class="text-sm max-w-lg leading-relaxed" style="color:#6ee7b7">
-                    A modern web-based GUI for managing Nginx on Ubuntu servers — built for speed,
-                    security, and real operational use.
+                <p class="text-sm max-w-xl leading-relaxed" style="color:#6ee7b7">
+                    A modern web-based GUI for managing Nginx across multiple Ubuntu servers —
+                    built for speed, security, and real operational use. Manage configs, SSL, logs,
+                    backups, proxies, and run security tests — all from one interface.
                 </p>
             </div>
-
-            {# Version badge #}
             <div class="ml-auto flex-shrink-0 text-right hidden sm:block">
                 <p class="text-xs font-semibold mb-1" style="color:#6ee7b7">Version</p>
-                <p class="text-2xl font-extrabold text-white">1.0</p>
-                <p class="text-xs mt-1" style="color:#4ade80">Stable</p>
+                <p class="text-2xl font-extrabold text-white">2.0</p>
+                <p class="text-xs mt-1" style="color:#4ade80">Multi-Node</p>
             </div>
         </div>
     </div>
@@ -70,21 +65,20 @@
         </div>
     </div>
 
-    {# ── Features grid ─────────────────────────────────────────────────────── #}
+    {# ── Features ──────────────────────────────────────────────────────────── #}
     <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
         <svg class="w-4 h-4 text-nginx" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
         </svg>
-        Features
+        All Features
     </h2>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
 
         {# Dashboard #}
         <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                 style="background:#f0fdf4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#f0fdf4">
                 <svg class="w-5 h-5" style="color:#009639" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
                           d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10-3a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1v-7z"/>
@@ -93,16 +87,15 @@
             <div>
                 <p class="font-semibold text-gray-800 mb-1">Dashboard &amp; System Monitor</p>
                 <p class="text-xs text-gray-500 leading-relaxed">
-                    Real-time Nginx status, CPU, RAM, and network bandwidth with animated SVG ring gauges.
-                    Auto-refreshes every 5 seconds.
+                    Real-time Nginx status, CPU, RAM, disk usage, and network I/O with animated SVG ring gauges.
+                    Fully node-aware — shows metrics for whichever node is selected. Auto-refreshes every 5 seconds.
                 </p>
             </div>
         </div>
 
         {# Config Manager #}
         <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                 style="background:#eff6ff">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#eff6ff">
                 <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
                           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -111,17 +104,56 @@
             <div>
                 <p class="font-semibold text-gray-800 mb-1">Config Manager</p>
                 <p class="text-xs text-gray-500 leading-relaxed">
-                    Create, edit, and delete Nginx server blocks in <span class="font-mono">sites-available</span>.
-                    CodeMirror editor with Nginx syntax highlighting, code folding, and <kbd class="px-1 py-0.5 bg-gray-100 rounded text-xs">Ctrl+S</kbd> to save.
-                    Runs <span class="font-mono">nginx -t</span> validation before every save.
+                    Create and edit Nginx server blocks directly in <span class="font-mono">sites-enabled</span> —
+                    changes are live immediately. Disabling a site archives it to
+                    <span class="font-mono">sites-available</span> instead of deleting it.
+                    CodeMirror editor with Nginx syntax highlighting, code folding, and
+                    <kbd class="px-1 py-0.5 bg-gray-100 rounded text-xs">Ctrl+S</kbd> to save.
+                    Runs <span class="font-mono">nginx -t</span> before every save. Works on local and remote nodes.
+                </p>
+            </div>
+        </div>
+
+        {# Proxy Builder #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#f0f9ff">
+                <svg class="w-5 h-5 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M8 9l4-4 4 4m0 6l-4 4-4-4"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">Proxy Manager &amp; Builder</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    Visual UI to create and manage reverse-proxy server blocks — no raw Nginx syntax needed.
+                    Fill in domain, upstream port, SSL toggle, and location rules; the builder generates a
+                    validated config file. Supports local and remote nodes. Enable/disable with one click.
+                </p>
+            </div>
+        </div>
+
+        {# Multi-Node #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#eff6ff">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">Multi-Node Management</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    Add unlimited remote Ubuntu servers as nodes. SSH via username+password or private key.
+                    Switch the active node from the sidebar — all pages (Dashboard, Configs, Proxy, SSL, Logs,
+                    Backup) instantly show that node's data. Live ping status dots in the sidebar. Remote
+                    Nginx reload with one click.
                 </p>
             </div>
         </div>
 
         {# Site Toggle #}
         <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                 style="background:#fefce8">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#fefce8">
                 <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
                           d="M13 10V3L4 14h7v7l9-11h-7z"/>
@@ -130,16 +162,16 @@
             <div>
                 <p class="font-semibold text-gray-800 mb-1">Site Enable / Disable</p>
                 <p class="text-xs text-gray-500 leading-relaxed">
-                    Toggle sites on and off instantly by managing symlinks in <span class="font-mono">sites-enabled</span>.
-                    Status is reflected live on the config list.
+                    Toggle sites on/off by managing symlinks in <span class="font-mono">sites-enabled</span>.
+                    Works on both local and remote nodes. Status reflected live in the config and proxy lists.
+                    Nginx is reloaded automatically after each toggle.
                 </p>
             </div>
         </div>
 
         {# SSL Manager #}
         <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                 style="background:#faf5ff">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#faf5ff">
                 <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
                           d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
@@ -150,15 +182,16 @@
                 <p class="text-xs text-gray-500 leading-relaxed">
                     View expiry dates, days remaining, and status badges for all certificates.
                     Upload new SSL files via drag-and-drop. Edit <span class="font-mono">.crt</span> and
-                    <span class="font-mono">.key</span> files directly in the browser.
+                    <span class="font-mono">.key</span> files in the browser. For remote nodes, lists certs
+                    from <span class="font-mono">/etc/ssl/private</span>, <span class="font-mono">/etc/nginx/ssl</span>,
+                    and <span class="font-mono">/etc/letsencrypt/live</span> via SSH.
                 </p>
             </div>
         </div>
 
         {# Log Viewer #}
         <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                 style="background:#fff7ed">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#fff7ed">
                 <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
                           d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
@@ -167,17 +200,57 @@
             <div>
                 <p class="font-semibold text-gray-800 mb-1">Log Viewer</p>
                 <p class="text-xs text-gray-500 leading-relaxed">
-                    Dark terminal-style viewer for access and error logs. Color-coded by HTTP status
-                    and log level. Live search, status / level filter pills, browser &amp; OS detection
-                    from User-Agent, horizontal scroll, sticky column headers, and auto-refresh.
+                    Dark terminal-style viewer for access and error logs — up to 500 lines at a time.
+                    Color-coded by HTTP status and log level. Live search, filter pills, browser &amp; OS
+                    detection from User-Agent, auto-refresh. Node-aware: fetches logs from the selected
+                    node over SSH.
                 </p>
+            </div>
+        </div>
+
+        {# Backup #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#fdf4ff">
+                <svg class="w-5 h-5 text-fuchsia-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">Backup &amp; Restore</p>
+                <p class="text-xs text-gray-500 leading-relaxed">
+                    One-click <span class="font-mono">tar.gz</span> backup of all
+                    <span class="font-mono">sites-enabled</span> and <span class="font-mono">sites-available</span>
+                    configs. Schedule auto-backups (hourly, daily,
+                    weekly) with configurable retention. For remote nodes, files are fetched over SFTP and
+                    stored locally. Restore any backup instantly. Backup history with kind badges (manual,
+                    scheduled, remote).
+                </p>
+            </div>
+        </div>
+
+        {# Testing Suite #}
+        <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#f0fdf4">
+                <svg class="w-5 h-5" style="color:#009639" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+            </div>
+            <div>
+                <p class="font-semibold text-gray-800 mb-1">Testing Suite (4 tabs)</p>
+                <ul class="text-xs text-gray-500 leading-relaxed space-y-1 mt-1">
+                    <li><span class="font-medium text-gray-600">SSL Check</span> — expiry, TLS version, cipher grade, SAN list</li>
+                    <li><span class="font-medium text-gray-600">Security Headers</span> — HSTS, CSP, X-Frame-Options, referrer policy &amp; more</li>
+                    <li><span class="font-medium text-gray-600">Load Test</span> — up to 1 000 requests / 500 concurrency; sparkline chart, p90/p99, RPS</li>
+                    <li><span class="font-medium text-gray-600">API Security</span> — HTTPS enforce, auth check, CORS wildcard, TRACE method, rate-limit headers, server info leakage, sensitive data in body, cache-control</li>
+                </ul>
             </div>
         </div>
 
         {# Nginx Controls #}
         <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                 style="background:#f0fdf4">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#f0fdf4">
                 <svg class="w-5 h-5" style="color:#009639" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
                           d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -186,17 +259,17 @@
             <div>
                 <p class="font-semibold text-gray-800 mb-1">Nginx Controls</p>
                 <p class="text-xs text-gray-500 leading-relaxed">
-                    One-click <strong>Reload Nginx</strong> available on every page.
-                    Uses <span class="font-mono">nsenter</span> to reach the host's systemd from inside
-                    the Docker container without privileged socket hacks.
+                    One-click <strong>Reload Nginx</strong> available on every page, for both local and remote
+                    nodes. Uses <span class="font-mono">nsenter</span> to reach the host's systemd from inside
+                    Docker. Remote reload runs <span class="font-mono">systemctl reload nginx</span> over SSH
+                    with sudo.
                 </p>
             </div>
         </div>
 
         {# User Management #}
         <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                 style="background:#eff6ff">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#eff6ff">
                 <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
                           d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
@@ -206,16 +279,15 @@
                 <p class="font-semibold text-gray-800 mb-1">User Management &amp; Roles</p>
                 <p class="text-xs text-gray-500 leading-relaxed">
                     Add, edit, and delete users. Two roles: <strong>Admin</strong> (full access) and
-                    <strong>Viewer</strong> (read-only). Safeguards prevent deleting the last admin
-                    or your own account. Users stored in a JSON file — no database required.
+                    <strong>Viewer</strong> (read-only). Safeguards prevent deleting the last admin or your
+                    own account. Users stored in a JSON file — no database required.
                 </p>
             </div>
         </div>
 
         {# Auth #}
         <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex gap-4">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                 style="background:#faf5ff">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:#faf5ff">
                 <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
                           d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
@@ -225,14 +297,36 @@
                 <p class="font-semibold text-gray-800 mb-1">JWT Authentication</p>
                 <p class="text-xs text-gray-500 leading-relaxed">
                     All routes protected by JWT tokens stored in <span class="font-mono">httpOnly</span> cookies.
-                    Passwords hashed with bcrypt. Configurable token expiry and secret key via environment variables.
+                    Passwords hashed with bcrypt. Configurable token expiry and secret key via
+                    <span class="font-mono">.env</span>. Active node selection persisted in a separate
+                    <span class="font-mono">active_node</span> cookie.
                 </p>
             </div>
         </div>
 
     </div>
 
-    {# ── Tech stack ────────────────────────────────────────────────────────── #}
+    {# ── Node-Aware Architecture note ──────────────────────────────────────── #}
+    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-8 flex gap-4">
+        <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+        </div>
+        <div>
+            <p class="text-sm font-semibold text-blue-800 mb-1">Node-Aware Design</p>
+            <p class="text-xs text-blue-700 leading-relaxed">
+                All pages read the selected node from the <span class="font-mono">active_node</span> cookie,
+                set globally by the sidebar node switcher. Selecting a remote node causes every page —
+                Dashboard metrics, Configs, Proxy Manager, SSL, Logs, and Backup — to fetch and display
+                data exclusively from that node via SSH/SFTP. Switching back to <em>Local</em> immediately
+                returns to the host server. Data from different nodes is never mixed.
+            </p>
+        </div>
+    </div>
+
+    {# ── Tech Stack ────────────────────────────────────────────────────────── #}
     <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
         <svg class="w-4 h-4 text-nginx" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -244,23 +338,67 @@
     <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8">
         <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-gray-100">
             {% set stack = [
-                ('Backend', 'FastAPI', 'Python 3.12', '#009639'),
-                ('Templates', 'Jinja2', 'Server-side HTML', '#f59e0b'),
-                ('Styling', 'Tailwind CSS', 'CDN v3 (no build)', '#06b6d4'),
+                ('Backend', 'FastAPI', 'Python 3.12 + Uvicorn', '#009639'),
+                ('Templates', 'Jinja2', 'Server-side HTML rendering', '#f59e0b'),
+                ('Styling', 'Tailwind CSS', 'CDN v3 — no build step', '#06b6d4'),
                 ('Editor', 'CodeMirror 5', 'Nginx syntax highlight', '#8b5cf6'),
                 ('Auth', 'python-jose', 'JWT + bcrypt', '#ec4899'),
                 ('SSL Parser', 'cryptography', 'X.509 cert info', '#14b8a6'),
-                ('Container', 'Docker', 'linux/amd64', '#2563eb'),
-                ('Web Server', 'Nginx', 'Host managed', '#009639'),
+                ('Remote SSH', 'paramiko', 'SSH + SFTP for nodes', '#f97316'),
+                ('Container', 'Docker', 'linux/amd64 + pid:host', '#2563eb'),
             ] %}
             {% for label, name, detail, color in stack %}
             <div class="px-4 py-4">
                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{{ label }}</p>
-                <p class="text-sm font-bold text-gray-800" style="color:{{ color }}">{{ name }}</p>
+                <p class="text-sm font-bold" style="color:{{ color }}">{{ name }}</p>
                 <p class="text-xs text-gray-400 mt-0.5">{{ detail }}</p>
             </div>
             {% endfor %}
         </div>
+    </div>
+
+    {# ── API Endpoints summary ─────────────────────────────────────────────── #}
+    <h2 class="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4 text-nginx" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+        </svg>
+        API Overview
+    </h2>
+
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8">
+        <table class="w-full text-xs">
+            <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                    <th class="text-left px-4 py-2.5 font-semibold text-gray-500 uppercase tracking-wide">Endpoint</th>
+                    <th class="text-left px-4 py-2.5 font-semibold text-gray-500 uppercase tracking-wide">Description</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% set apis = [
+                    ('GET /api/nginx/status', 'Nginx service active/inactive status'),
+                    ('GET /api/system/stats', 'CPU, RAM, disk, network I/O for local node'),
+                    ('GET /api/logs/{type}', 'Last N lines of access or error log (local)'),
+                    ('GET /api/testing/ssl', 'TLS cert check — expiry, cipher, SAN, grade'),
+                    ('GET /api/testing/security', 'HTTP security headers check with grade'),
+                    ('GET /api/testing/load', 'Concurrent load test — up to 1 000 requests'),
+                    ('GET /api/testing/api-security', 'API security audit — 11 standard checks'),
+                    ('GET /api/nodes/{id}/ping', 'SSH connectivity check for a remote node'),
+                    ('GET /api/nodes/{id}/status', 'Nginx status on a remote node'),
+                    ('GET /api/nodes/{id}/stats', 'CPU/RAM/disk/network on a remote node'),
+                    ('GET /api/nodes/{id}/logs/{type}', 'Tail logs from a remote node over SSH'),
+                    ('GET /api/nodes/{id}/ssl', 'List SSL certificates on a remote node'),
+                    ('GET /api/nodes/{id}/proxies', 'List proxy configs on a remote node'),
+                    ('POST /api/nodes/test-connection', 'Test SSH credentials before saving a node'),
+                ] %}
+                {% for path, desc in apis %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2.5 font-mono text-nginx whitespace-nowrap">{{ path }}</td>
+                    <td class="px-4 py-2.5 text-gray-600">{{ desc }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 
     {# ── Deployment info ───────────────────────────────────────────────────── #}
@@ -283,12 +421,16 @@
                 <span class="text-slate-600 w-24 flex-shrink-0">Runtime</span>
                 <span>Docker — privileged + pid:host for systemd access</span>
             </div>
+            <div class="flex gap-3">
+                <span class="text-slate-600 w-24 flex-shrink-0">Run</span>
+                <span style="color:#94a3b8">uvicorn backend.main:app --host 0.0.0.0 --port 8080</span>
+            </div>
         </div>
     </div>
 
     {# ── Footer ────────────────────────────────────────────────────────────── #}
     <div class="flex items-center justify-between text-xs text-gray-400 pb-2">
-        <span>Nginx UI Pro Manager · v1.0 · 2025</span>
+        <span>Nginx UI Pro Manager · v2.0 · 2026</span>
         <span>Developed with ♥ by <strong class="text-gray-600">Piti Phanthasombath</strong></span>
     </div>
 

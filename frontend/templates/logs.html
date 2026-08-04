@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Logs — Nginx UI{% endblock %}
-{% block page_title %}Log Viewer{% endblock %}
+{% block page_title %}Log Viewer{% if active_node and active_node_id != 'local' %} — {{ active_node.name }}{% endif %}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -64,6 +64,18 @@
 {% endblock %}
 
 {% block content %}
+
+{# ── Remote node banner ───────────────────────────────────────────────────── #}
+{% if active_node and active_node_id != 'local' %}
+<div class="flex items-center gap-2 mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+    </svg>
+    Showing nginx logs from remote node: <strong class="ml-1">{{ active_node.name }}</strong>
+    <span class="font-mono text-blue-400 ml-1">({{ active_node.host }})</span>
+</div>
+{% endif %}
 
 {# ── Toolbar ─────────────────────────────────────────────────────────────── #}
 <div class="flex flex-wrap gap-2 mb-3 items-center">
@@ -207,6 +219,9 @@ const LEVEL_ROW_BG = {
     error:'rgba(127,29,29,.14)', warn:'rgba(120,83,0,.12)',
 };
 const STATUS_FG = s => s>=500?'#f87171': s>=400?'#fbbf24': s>=300?'#60a5fa':'#34d399';
+
+// ── Active node (from server-rendered cookie context) ─────────────────────────
+const ACTIVE_NODE = {{ active_node_id | tojson }};
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let currentLog   = 'access';
@@ -459,7 +474,10 @@ async function loadLog(type) {
         '<tr><td colspan="20" style="padding:24px;color:#8b949e;text-align:center">Loading…</td></tr>';
 
     try {
-        const res = await fetch(`/api/logs/${type}?lines=${lines}`);
+        const url = ACTIVE_NODE !== 'local'
+            ? `/api/nodes/${ACTIVE_NODE}/logs/${type}?lines=${lines}`
+            : `/api/logs/${type}?lines=${lines}`;
+        const res = await fetch(url);
         allLines = await res.json();
         if (!Array.isArray(allLines)) allLines = [];
         const ts = new Date().toLocaleTimeString();

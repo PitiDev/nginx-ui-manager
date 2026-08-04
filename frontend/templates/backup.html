@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Backup — Nginx UI{% endblock %}
+{% block page_title %}Backup Config{% if active_node and active_node_id != 'local' %} — {{ active_node.name }}{% endif %}{% endblock %}
+
+{% block content %}
+
+{% if active_node and active_node_id != 'local' %}
+<!-- ── Remote node backup banner ── -->
+<div class="flex items-center gap-2 mb-4 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+    </svg>
+    Remote node active: <strong class="mx-1">{{ active_node.name }}</strong> ({{ active_node.host }}) — backup will download nginx configs from this node and store them locally
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
+    <!-- Remote Manual Backup -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-sm font-semibold text-gray-800">Backup {{ active_node.name }}</h2>
+                <p class="text-xs text-gray-500">Download nginx configs via SSH</p>
+            </div>
+        </div>
+        {% if current_user and current_user.role == 'admin' %}
+        <form method="post" action="/backup/node/{{ active_node_id }}/create">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Note <span class="text-gray-400">(optional)</span></label>
+            <input type="text" name="note" maxlength="20" placeholder="e.g. before upgrade"
+                   class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent">
+            <button type="submit"
+                    class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Backup {{ active_node.name }} Now
+            </button>
+        </form>
+        {% else %}
+        <p class="text-xs text-gray-400">Admin access required to create backups.</p>
+        {% endif %}
+    </div>
+
+    <!-- Auto Backup note for remote -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 lg:col-span-2">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-sm font-semibold text-gray-800">Auto Backup</h2>
+                <p class="text-xs text-gray-500">Scheduled backups run on the local node only</p>
+            </div>
+        </div>
+        <p class="text-xs text-gray-500">Auto-backup schedules apply to the <strong>local node</strong> only. To configure auto-backup settings, switch back to Local node.</p>
+    </div>
+</div>
+{% else %}
+<!-- ── Local node backup controls ── -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
+
+    <!-- Manual Backup -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="w-9 h-9 rounded-xl bg-nginx-light flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-nginx" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-sm font-semibold text-gray-800">Manual Backup</h2>
+                <p class="text-xs text-gray-500">Snapshot sites-enabled and sites-available now</p>
+            </div>
+        </div>
+        {% if current_user and current_user.role == 'admin' %}
+        <form method="post" action="/backup/create">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Note <span class="text-gray-400">(optional)</span></label>
+            <input type="text" name="note" maxlength="40" placeholder="e.g. before upgrade"
+                   class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+            <button type="submit"
+                    class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-nginx text-white text-sm font-medium rounded-lg hover:bg-nginx-dark transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create Backup
+            </button>
+        </form>
+        {% else %}
+        <p class="text-xs text-gray-400">Admin access required to create backups.</p>
+        {% endif %}
+    </div>
+
+    <!-- Auto Backup Settings -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 lg:col-span-2">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-sm font-semibold text-gray-800">Auto Backup</h2>
+                <p class="text-xs text-gray-500">Scheduled backups on a fixed interval</p>
+            </div>
+            {% if settings.enabled %}
+            <span class="ml-auto inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Active
+            </span>
+            {% else %}
+            <span class="ml-auto inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Disabled
+            </span>
+            {% endif %}
+        </div>
+
+        {% if current_user and current_user.role == 'admin' %}
+        <form method="post" action="/backup/settings" class="space-y-4">
+            <div class="flex items-center gap-3">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" name="enabled" value="on" id="auto-enabled"
+                           {% if settings.enabled %}checked{% endif %}
+                           class="sr-only peer" onchange="toggleIntervalRow(this)">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-nginx rounded-full peer
+                                peer-checked:after:translate-x-full peer-checked:after:border-white
+                                after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                after:bg-white after:border-gray-300 after:border after:rounded-full
+                                after:h-5 after:w-5 after:transition-all peer-checked:bg-nginx"></div>
+                </label>
+                <span class="text-sm font-medium text-gray-700">Enable auto backup</span>
+            </div>
+
+            <div id="interval-row" class="flex items-center gap-3 {% if not settings.enabled %}opacity-50 pointer-events-none{% endif %}">
+                <label class="text-sm text-gray-600 whitespace-nowrap">Every</label>
+                <input type="number" name="interval_hours" min="1" max="168"
+                       value="{{ settings.interval_hours or 24 }}"
+                       class="w-24 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+                <label class="text-sm text-gray-600">hours</label>
+                <span class="text-xs text-gray-400">
+                    (1–168 h)
+                    {% if settings.last_backup_time %}
+                    &nbsp;· Last backup: <span class="font-mono">{{ settings.last_backup_time | int | string }}</span>
+                    {% endif %}
+                </span>
+            </div>
+
+            <button type="submit"
+                    class="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors">
+                Save Settings
+            </button>
+        </form>
+        {% else %}
+        <div class="text-xs text-gray-500 space-y-1">
+            <p>Status: <span class="font-medium {{ 'text-green-600' if settings.enabled else 'text-gray-400' }}">{{ 'Enabled' if settings.enabled else 'Disabled' }}</span></p>
+            <p>Interval: every <span class="font-medium">{{ settings.interval_hours or 24 }}</span> hours</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}{# end local/remote if #}
+
+<!-- Backup History -->
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-800">Backup History</h2>
+        <span class="text-xs text-gray-400">{{ backups | length }} backup(s)</span>
+    </div>
+
+    {% if backups %}
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="bg-gray-50 border-b border-gray-100">
+                <th class="text-left px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Timestamp</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Note</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Kind</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Size</th>
+                {% if current_user and current_user.role == 'admin' %}
+                <th class="text-right px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wide">Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+            {% for b in backups %}
+            <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-5 py-3.5 font-mono text-xs text-gray-700">{{ b.timestamp }}</td>
+                <td class="px-5 py-3.5 text-xs text-gray-600">{{ b.note or '—' }}</td>
+                <td class="px-5 py-3.5">
+                    {% if b.kind == 'auto' %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Auto
+                    </span>
+                    {% elif 'remote' in (b.note or '').lower() %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-50 text-violet-600">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+                        </svg>
+                        Remote
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-nginx-light text-nginx">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                        </svg>
+                        Manual
+                    </span>
+                    {% endif %}
+                </td>
+                <td class="px-5 py-3.5 text-xs text-gray-400 font-mono">{{ b.size_human }}</td>
+                {% if current_user and current_user.role == 'admin' %}
+                <td class="px-5 py-3.5 text-right">
+                    <form method="post" action="/backup/{{ b.name }}/delete"
+                          onsubmit="return confirm('Delete backup {{ b.timestamp }}? This cannot be undone.')">
+                        <button type="submit"
+                                class="px-2.5 py-1 text-xs font-medium bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors">
+                            Delete
+                        </button>
+                    </form>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="p-12 text-center">
+        <svg class="w-10 h-10 text-gray-200 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+        </svg>
+        <p class="text-gray-400 text-sm">No backups yet</p>
+        {% if current_user and current_user.role == 'admin' %}
+        <p class="text-gray-300 text-xs mt-1">Create a manual backup or enable auto backup above</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleIntervalRow(checkbox) {
+    const row = document.getElementById('interval-row');
+    if (!row) return;
+    if (checkbox.checked) {
+        row.classList.remove('opacity-50', 'pointer-events-none');
+    } else {
+        row.classList.add('opacity-50', 'pointer-events-none');
+    }
+}
+</script>
+{% endblock %}

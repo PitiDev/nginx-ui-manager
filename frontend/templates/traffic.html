@@ -1,0 +1,1151 @@
+{% extends "base.html" %}
+{% block title %}Traffic Monitor — Nginx UI{% endblock %}
+{% block page_title %}Traffic Monitor{% if active_node and active_node_id != 'local' %} — {{ active_node.name }}{% endif %}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .tm-panel { background: #0d1117; border: 1px solid #21262d; border-radius: 1rem; overflow: hidden; }
+    .tm-panel-head { border-bottom: 1px solid #21262d; }
+    .tm-glow { box-shadow: 0 0 0 1px rgba(0,150,57,.15), 0 8px 30px -12px rgba(0,0,0,.6); }
+
+    .tm-flow-canvas {
+        position: relative;
+        background-color: #0d1117;
+        background-image:
+            linear-gradient(180deg, transparent 0%, rgba(52,211,153,.09) 50%, transparent 100%),
+            radial-gradient(circle at 10% 15%, rgba(0,150,57,.18) 0%, transparent 42%),
+            radial-gradient(circle at 90% 85%, rgba(34,211,238,.14) 0%, transparent 42%),
+            linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
+        background-size: 100% 240%, auto, auto, 28px 28px, 28px 28px;
+        background-position: 0 -240%, 0 0, 0 0, 0 0, 0 0;
+        background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat;
+        animation: tm-scan-sweep 7s linear infinite;
+    }
+    @keyframes tm-scan-sweep {
+        0%   { background-position: 0 -240%, 0 0, 0 0, 0 0, 0 0; }
+        100% { background-position: 0 240%,  0 0, 0 0, 0 0, 0 0; }
+    }
+
+    @keyframes tm-pulse-dot {
+        0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52,211,153,.55); }
+        50%     { opacity: .55; box-shadow: 0 0 0 6px rgba(52,211,153,0); }
+    }
+    .tm-live-dot { animation: tm-pulse-dot 1.6s ease-in-out infinite; }
+
+    @keyframes tm-row-in {
+        from { opacity: 0; transform: translateY(-6px); background: rgba(52,211,153,.12); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .tm-row-in { animation: tm-row-in .5s ease-out; }
+
+    @keyframes tm-count-flash {
+        0%   { text-shadow: 0 0 12px currentColor; }
+        100% { text-shadow: none; }
+    }
+    .tm-flash { animation: tm-count-flash .6s ease-out; }
+
+    @keyframes tm-glow-hit {
+        0%   { opacity: .55; }
+        25%  { opacity: 1; }
+        100% { opacity: .55; }
+    }
+    .tm-glow-hit { animation: tm-glow-hit .5s ease-out; }
+
+    .tm-node-box { fill: #161b22; stroke: #30363d; stroke-width: 1.5; }
+    .tm-node-label { fill: #c9d1d9; font-size: 11px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .tm-node-sub { fill: #6e7681; font-size: 9px; font-family: ui-monospace, monospace; }
+    .tm-path { fill: none; stroke: #30363d; stroke-width: 1.5; stroke-dasharray: 3 4; }
+
+    #tm-scroll::-webkit-scrollbar { width: 7px; }
+    #tm-scroll::-webkit-scrollbar-track { background: #0d1117; }
+    #tm-scroll::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+
+    .tm-bar-wrap { background: #161b22; border-radius: 6px; overflow: hidden; }
+    .tm-bar-fill { transition: width .6s cubic-bezier(.16,1,.3,1); }
+
+    /* NOTE: Chrome has never implemented the Firefox-only :-moz-full-screen
+       prefix, and a plain comma-separated selector list isn't "forgiving"
+       the way :is()/:where() are — one unrecognized selector in the group
+       invalidates the ENTIRE rule, silently dropping all of it from
+       document.styleSheets. Each :fullscreen variant below gets its own
+       standalone rule instead of being grouped, so a browser that doesn't
+       know one prefix still applies the others. */
+    #tm-fullscreen-root:fullscreen { background: #010409; padding: 24px; overflow-y: auto; }
+    #tm-fullscreen-root:-webkit-full-screen { background: #010409; padding: 24px; overflow-y: auto; }
+
+    /* Chrome's UA stylesheet forces `overflow: hidden !important` on the
+       element that IS `:fullscreen` — author CSS (even with !important)
+       can never win that fight, since UA !important outranks author
+       !important in the cascade. So the fullscreen element itself just
+       becomes a full-bleed frame; the actual scrolling happens on a plain
+       (non-fullscreen) child wrapper inside it, which isn't subject to
+       that restriction. The SVG keeps its normal proportional max-height,
+       so real box size stays constant regardless of count — more servers
+       means "scroll further", never "shrink until illegible". */
+    #tm-flow-panel:fullscreen { background: #010409; padding: 0; }
+    #tm-flow-panel:-webkit-full-screen { background: #010409; padding: 0; }
+    #tm-flow-panel:fullscreen #tm-flow-scroll,
+    #tm-flow-panel:-webkit-full-screen #tm-flow-scroll {
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+    #tm-flow-fs-btn:hover { background: rgba(255,255,255,.09) !important; color: #c9d1d9 !important; }
+
+    .tm-node-tab {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 10px;
+        font-size: 12px; font-weight: 600;
+        background: #161b22; border: 1px solid #30363d; color: #8b949e;
+        transition: all .15s; cursor: pointer;
+    }
+    .tm-node-tab:hover { background: #1c2430; color: #c9d1d9; }
+    .tm-node-tab.active-local  { background: rgba(0,150,57,.15);   border-color: #009639; color: #34d399; }
+    .tm-node-tab.active-remote { background: rgba(59,130,246,.15); border-color: #3b82f6; color: #60a5fa; }
+    .tm-node-tab.active-all    { background: rgba(168,85,247,.15); border-color: #a855f7; color: #c084fc; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div id="tm-fullscreen-root">
+
+{% if all_nodes %}
+{# ── Node tabs ────────────────────────────────────────────────────────────── #}
+<div class="flex items-center gap-2 flex-wrap mb-4" id="tm-node-tabs">
+    <span class="text-xs font-semibold uppercase tracking-wider mr-1" style="color:#6e7681">Node:</span>
+
+    <button onclick="tmSelectNode('all')" id="tm-tab-all" class="tm-node-tab">
+        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 6a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2z"/>
+        </svg>
+        All Nodes
+    </button>
+
+    <button onclick="tmSelectNode('local')" id="tm-tab-local" class="tm-node-tab">
+        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+        </svg>
+        Local
+    </button>
+
+    {% for node in all_nodes %}
+    <button onclick="tmSelectNode('{{ node.id }}')" id="tm-tab-{{ node.id }}" class="tm-node-tab">
+        <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background:#484f58" id="tm-tab-dot-{{ node.id }}"></span>
+        {{ node.name }}
+        <span class="font-mono opacity-60">{{ node.host }}</span>
+    </button>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# ── Toolbar ─────────────────────────────────────────────────────────────── #}
+<div class="flex flex-wrap items-center gap-2 mb-4">
+    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 tm-live-dot" id="tm-live-dot"></span>
+        <span id="tm-live-label">LIVE</span>
+    </span>
+    <span class="text-xs text-gray-400" id="tm-updated">Connecting…</span>
+
+    <div class="ml-auto flex items-center gap-2">
+        <select id="tm-lines" onchange="tmSetLines()"
+                class="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-nginx">
+            <option value="1000">Last 1,000 lines</option>
+            <option value="4000" selected>Last 4,000 lines</option>
+            <option value="8000">Last 8,000 lines</option>
+        </select>
+        <button id="tm-pause-btn" onclick="tmTogglePause()"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span id="tm-pause-label">Pause</span>
+        </button>
+        <button id="tm-fullscreen-btn" onclick="tmToggleFullscreen()"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
+            <svg id="tm-fullscreen-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>
+            </svg>
+            <span id="tm-fullscreen-label">Fullscreen</span>
+        </button>
+    </div>
+</div>
+
+{# ── Stat tiles ─────────────────────────────────────────────────────────────── #}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+    <div class="tm-panel tm-glow p-5">
+        <p class="text-xs font-semibold uppercase tracking-wider" style="color:#6e7681">Total Requests</p>
+        <p id="tm-total" class="text-3xl font-black text-white mt-1 font-mono">–</p>
+        <p class="text-xs mt-1" style="color:#484f58">in current log window</p>
+    </div>
+    <div class="tm-panel tm-glow p-5">
+        <p class="text-xs font-semibold uppercase tracking-wider" style="color:#6e7681">Requests / sec</p>
+        <p id="tm-rps" class="text-3xl font-black mt-1 font-mono" style="color:#34d399">–</p>
+        <p class="text-xs mt-1" style="color:#484f58">rolling 10s window</p>
+    </div>
+    <div class="tm-panel tm-glow p-5">
+        <p class="text-xs font-semibold uppercase tracking-wider" style="color:#6e7681">Throughput</p>
+        <p id="tm-throughput" class="text-3xl font-black mt-1 font-mono" style="color:#60a5fa">–</p>
+        <p id="tm-total-bytes" class="text-xs mt-1" style="color:#484f58">total: –</p>
+    </div>
+    <div class="tm-panel tm-glow p-5">
+        <p class="text-xs font-semibold uppercase tracking-wider" style="color:#6e7681">Error Rate</p>
+        <p id="tm-error-rate" class="text-3xl font-black mt-1 font-mono" style="color:#f87171">–</p>
+        <p id="tm-error-count" class="text-xs mt-1" style="color:#484f58">4xx + 5xx</p>
+    </div>
+</div>
+
+{# ── Live flow diagram ─────────────────────────────────────────────────────── #}
+<div class="tm-panel tm-glow mb-5" id="tm-flow-panel">
+    <div id="tm-flow-scroll">
+    <div class="tm-panel-head px-5 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <div class="w-1 h-4 rounded-full bg-nginx"></div>
+            <h3 class="text-sm font-semibold text-white">Live Request Flow</h3>
+            <span id="tm-flow-more" class="hidden inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30"></span>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="text-xs" style="color:#484f58" id="tm-flow-subtitle">Client → Nginx → Upstream Service (live proxy_pass routing)</span>
+            <button id="tm-flow-fs-btn" onclick="tmToggleFlowFullscreen()" title="Fullscreen this diagram"
+                    class="inline-flex items-center justify-center w-6 h-6 rounded-md border transition-colors"
+                    style="background:rgba(255,255,255,.04);border-color:#30363d;color:#8b949e">
+                <svg id="tm-flow-fs-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+    <div class="p-4 tm-flow-canvas" style="position:relative">
+        <div id="tm-flow-loading" style="position:absolute;inset:0;z-index:20;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(1,4,9,.78);backdrop-filter:blur(2px);border-radius:0 0 1rem 1rem">
+            <svg class="animate-spin" style="width:34px;height:34px;color:#34d399" fill="none" viewBox="0 0 24 24">
+                <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <p id="tm-flow-loading-text" class="mt-3 text-sm font-semibold" style="color:#c9d1d9">Loading…</p>
+        </div>
+        <svg id="tm-flow-svg" viewBox="0 0 780 320" class="w-full" style="max-height:360px;position:relative;z-index:1" data-base-width="780">
+            <defs>
+                <path id="path-client-nginx" d="M85,160 C200,160 260,160 300,160" fill="none"/>
+                <radialGradient id="glowNginx" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="#009639" stop-opacity="0.55"/>
+                    <stop offset="100%" stop-color="#009639" stop-opacity="0"/>
+                </radialGradient>
+            </defs>
+
+            <!-- static client→nginx guide (always present) -->
+            <path id="path-client-nginx-visible" class="tm-path" d="M85,160 C200,160 260,160 300,160" />
+
+            <!-- dynamic backend guide/motion paths (JS-populated from real proxy_pass targets) -->
+            <g id="tm-backend-guides"></g>
+
+            <!-- packet layer (JS-populated) -->
+            <g id="tm-packet-layer"></g>
+
+            <!-- Client node -->
+            <g>
+                <rect id="tm-client-box" x="10" y="135" width="150" height="50" rx="10" class="tm-node-box"/>
+                <text id="tm-client-label" x="85" y="156" text-anchor="middle" class="tm-node-label">CLIENT</text>
+                <text x="85" y="170" text-anchor="middle" class="tm-node-sub" id="tm-node-clients">requests</text>
+            </g>
+
+            <!-- Nginx node -->
+            <g>
+                <circle cx="370" cy="160" r="46" fill="url(#glowNginx)" id="tm-nginx-glow"/>
+                <rect x="300" y="121" width="140" height="78" rx="12" class="tm-node-box" id="tm-nginx-box" style="stroke:#009639"/>
+                <text id="tm-nginx-label" x="370" y="148" text-anchor="middle" class="tm-node-label" style="fill:#34d399">NGINX</text>
+                <text x="370" y="163" text-anchor="middle" class="tm-node-sub" id="tm-node-rps">0 req/s</text>
+                <text id="tm-nginx-sub2" x="370" y="176" text-anchor="middle" class="tm-node-sub">reverse proxy</text>
+                <text id="tm-nginx-load-line" xml:space="preserve" x="370" y="189" text-anchor="middle" class="tm-node-sub" style="font-weight:700"><tspan id="tm-nginx-load-prefix" style="fill:#6e7681"></tspan><tspan id="tm-nginx-cpu">CPU –%</tspan><tspan style="fill:#484f58"> · </tspan><tspan id="tm-nginx-ram">RAM –%</tspan></text>
+                <title>Server CPU/RAM load, sampled live (same method as the Dashboard's gauges). In "All Nodes" mode this is the average across reachable nodes.</title>
+            </g>
+
+            <!-- dynamic backend service boxes (JS-populated from real proxy_pass targets) -->
+            <g id="tm-backend-boxes"></g>
+
+            <!-- "All Nodes" mode only: Node → Proxy Domain 4th column -->
+            <g id="tm-domain-guides"></g>
+            <g id="tm-domain-boxes"></g>
+        </svg>
+    </div>
+    </div><!-- /#tm-flow-scroll -->
+</div>
+
+{# ── Request rate chart ────────────────────────────────────────────────────── #}
+<div class="tm-panel tm-glow mb-5">
+    <div class="tm-panel-head px-5 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <div class="w-1 h-4 rounded-full bg-cyan-400"></div>
+            <h3 class="text-sm font-semibold text-white">Request Rate — last 5 minutes</h3>
+        </div>
+        <span class="text-xs" style="color:#484f58">10s buckets</span>
+    </div>
+    <div class="p-4">
+        <canvas id="tm-chart" style="width:100%;height:140px"></canvas>
+    </div>
+</div>
+
+{# ── Status / paths / IPs row ──────────────────────────────────────────────── #}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
+
+    <div class="tm-panel tm-glow">
+        <div class="tm-panel-head px-5 py-3 flex items-center gap-2">
+            <div class="w-1 h-4 rounded-full bg-purple-400"></div>
+            <h3 class="text-sm font-semibold text-white">Status Mix</h3>
+        </div>
+        <div class="p-4">
+            <div class="tm-bar-wrap h-3 flex mb-4">
+                <div id="tm-seg-2xx" class="tm-bar-fill h-full" style="width:0%;background:#34d399"></div>
+                <div id="tm-seg-3xx" class="tm-bar-fill h-full" style="width:0%;background:#60a5fa"></div>
+                <div id="tm-seg-4xx" class="tm-bar-fill h-full" style="width:0%;background:#fbbf24"></div>
+                <div id="tm-seg-5xx" class="tm-bar-fill h-full" style="width:0%;background:#f87171"></div>
+            </div>
+            <div class="space-y-2 text-xs font-mono" id="tm-status-list"></div>
+            <div class="h-px my-3" style="background:#21262d"></div>
+            <p class="text-xs font-semibold uppercase tracking-wider mb-2" style="color:#6e7681">Methods</p>
+            <div class="flex flex-wrap gap-1.5" id="tm-methods"></div>
+        </div>
+    </div>
+
+    <div class="tm-panel tm-glow">
+        <div class="tm-panel-head px-5 py-3 flex items-center gap-2">
+            <div class="w-1 h-4 rounded-full bg-amber-400"></div>
+            <h3 class="text-sm font-semibold text-white">Top Paths</h3>
+        </div>
+        <div class="p-4 space-y-2.5" id="tm-top-paths"></div>
+    </div>
+
+    <div class="tm-panel tm-glow">
+        <div class="tm-panel-head px-5 py-3 flex items-center gap-2">
+            <div class="w-1 h-4 rounded-full bg-sky-400"></div>
+            <h3 class="text-sm font-semibold text-white">Top Client IPs</h3>
+        </div>
+        <div class="p-4 space-y-2.5" id="tm-top-ips"></div>
+    </div>
+</div>
+
+{# ── Live stream ───────────────────────────────────────────────────────────── #}
+<div class="tm-panel tm-glow">
+    <div class="tm-panel-head px-5 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <div class="w-1 h-4 rounded-full bg-emerald-400"></div>
+            <h3 class="text-sm font-semibold text-white">Live Request Stream</h3>
+        </div>
+        <span class="text-xs" style="color:#484f58">newest first</span>
+    </div>
+    <div id="tm-scroll" style="max-height:340px;overflow-y:auto">
+        <table class="w-full text-xs font-mono">
+            <tbody id="tm-stream-body">
+                <tr><td style="padding:24px;color:#484f58;text-align:center">Waiting for traffic…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+</div><!-- /#tm-fullscreen-root -->
+
+<script>
+// ── Config / state ───────────────────────────────────────────────────────────
+let ACTIVE_NODE = {{ active_node_id | tojson }};
+const ALL_NODES = {{ all_nodes | tojson }};
+const METHOD_COLOR = { GET:'#34d399', POST:'#60a5fa', PUT:'#fbbf24', PATCH:'#a78bfa', DELETE:'#f87171', HEAD:'#22d3ee', OPTIONS:'#94a3b8' };
+const STATUS_FG = s => s>=500?'#f87171': s>=400?'#fbbf24': s>=300?'#60a5fa':'#34d399';
+const LANE_COLOR = { 2:'#34d399', 3:'#60a5fa', 4:'#fbbf24', 5:'#f87171' };
+
+let seenRaw = new Set();
+let paused = false;
+let pollTimer = null;
+let backendMap = {};        // target -> {pathId, idx}
+let backendSignature = '';  // detects when the set of proxy_pass targets changes
+let chartDisplay = new Array(30).fill(0);
+let chartTarget = new Array(30).fill(0);
+let rafRunning = false;
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtBytesRate(b) {
+    if (b >= 1048576) return (b/1048576).toFixed(2)+' MB/s';
+    if (b >= 1024)    return (b/1024).toFixed(1)+' KB/s';
+    return Math.round(b)+' B/s';
+}
+function fmtBytes(b) {
+    if (b >= 1073741824) return (b/1073741824).toFixed(2)+' GB';
+    if (b >= 1048576) return (b/1048576).toFixed(1)+' MB';
+    if (b >= 1024)    return (b/1024).toFixed(1)+' KB';
+    return b+' B';
+}
+function flash(el, cls) { if (!el) return; cls = cls || 'tm-flash'; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+
+// ── Flow diagram: spawn a packet that travels along a given SVG path ──────────
+// Manually interpolated via requestAnimationFrame + getPointAtLength rather than
+// SMIL <animateMotion>, whose support (esp. dynamically-inserted, Safari) is
+// inconsistent — plain SVG geometry APIs work identically in every browser.
+function spawnLeg(pathId, color, durMs, onDone) {
+    const svgns = 'http://www.w3.org/2000/svg';
+    const layer = $('tm-packet-layer');
+    const pathEl = $(pathId);
+    if (!layer || !pathEl || typeof pathEl.getTotalLength !== 'function') { if (onDone) onDone(); return; }
+
+    const total = pathEl.getTotalLength();
+    const dot = document.createElementNS(svgns, 'circle');
+    dot.setAttribute('r', '6');
+    dot.setAttribute('fill', color);
+    dot.style.filter = `drop-shadow(0 0 7px ${color}) drop-shadow(0 0 3px #fff)`;
+    dot.style.opacity = '0';
+    layer.appendChild(dot);
+
+    // cap concurrent packets so a burst can't bloat the DOM
+    while (layer.childNodes.length > 80) layer.removeChild(layer.firstChild);
+
+    const start = performance.now();
+    function frame(now) {
+        const t = Math.min(1, (now - start) / durMs);
+        const pt = pathEl.getPointAtLength(t * total);
+        dot.setAttribute('cx', pt.x);
+        dot.setAttribute('cy', pt.y);
+        dot.style.opacity = t < 0.08 ? (t / 0.08) : (t > 0.85 ? Math.max(0, (1 - t) / 0.15) : 1);
+        if (t < 1 && dot.isConnected) {
+            requestAnimationFrame(frame);
+        } else {
+            dot.remove();
+            if (onDone) onDone();
+        }
+    }
+    requestAnimationFrame(frame);
+}
+
+function pulseNginx(rps) {
+    const box = $('tm-nginx-box');
+    if (!box) return;
+    const strength = Math.min(1, rps / 20);
+    box.style.filter = `drop-shadow(0 0 ${4 + strength*10}px rgba(0,150,57,${0.35 + strength*0.4}))`;
+}
+
+// Real server CPU + RAM load, sampled the same way as the Dashboard's
+// gauges. In "All Nodes" mode these are fleet averages across reachable
+// nodes (see merge_stats' cpu_percent/ram_percent), not one physical server.
+function loadColor(pct) {
+    return pct >= 85 ? '#f87171' : pct >= 60 ? '#fbbf24' : '#34d399';
+}
+
+function setLoadTspan(id, label, pct) {
+    const el = $(id);
+    if (!el) return;
+    if (pct === null || pct === undefined || isNaN(pct)) {
+        el.textContent = label + ' –%';
+        el.style.fill = '#6e7681';
+        return;
+    }
+    el.textContent = label + ' ' + pct.toFixed(0) + '%';
+    el.style.fill = loadColor(pct);
+}
+
+function updateNginxLoad(cpuPct, ramPct) {
+    const prefixEl = $('tm-nginx-load-prefix');
+    if (prefixEl) prefixEl.textContent = ACTIVE_NODE === 'all' ? 'AVG ' : '';
+    setLoadTspan('tm-nginx-cpu', 'CPU', cpuPct);
+    setLoadTspan('tm-nginx-ram', 'RAM', ramPct);
+}
+
+// ── Backend service nodes — built from real proxy_pass targets ────────────────
+function shortTarget(t) {
+    if (!t || t === '__generic__') return 'BACKEND';
+    if (t === '__none__') return 'NO DATA';
+    return t.replace(/^https?:\/\//, '').replace(/\/$/, '').toUpperCase();
+}
+
+function backendSubText(u) {
+    const shared = u.ambiguous ? ' ⚠ shared' : '';
+    return (u.path || '/') + shared + '  ·  ' + (u.count || 0).toLocaleString() + ' req';
+}
+
+function siteLabel(u) {
+    // In per-site backend mode `site` (the config's display name — often a
+    // domain) is the thing a user actually recognizes; in "All Nodes" mode
+    // site === target already (the node name), so this just shows once.
+    if (!u.site || u.site === u.target) return null;
+    return u.site.length > 30 ? u.site.slice(0, 29) + '…' : u.site;
+}
+
+// Grows the SVG (and repositions Client/Nginx) to comfortably fit however
+// many backend boxes are being shown, instead of squeezing a fixed slot —
+// real configs can easily have far more than the ~5 that fit in one screen.
+// `width` widens the viewBox for "All Nodes" mode's extra Domain column.
+function layoutFlowDiagram(n, boxH, width) {
+    const gapY = 10, topMargin = 16;
+    const contentHeight = n * boxH + Math.max(0, n - 1) * gapY;
+    const vbHeight = Math.max(240, contentHeight + topMargin * 2);
+    const cy = vbHeight / 2;
+    const vbWidth = width || 780;
+
+    const svg = $('tm-flow-svg');
+    svg.setAttribute('viewBox', `0 0 ${vbWidth} ${vbHeight}`);
+    // keep the same viewBox:on-screen scale as the original 780x240 @ 280px design
+    // instead of a fixed cap, so taller diagrams (more boxes) don't get squished
+    svg.style.maxHeight = Math.round(vbHeight * (280 / 240)) + 'px';
+    $('tm-client-box').setAttribute('y', (cy - 25).toFixed(1));
+    $('tm-client-label').setAttribute('y', (cy - 4).toFixed(1));
+    $('tm-node-clients').setAttribute('y', (cy + 10).toFixed(1));
+    $('tm-nginx-glow').setAttribute('cy', cy.toFixed(1));
+    $('tm-nginx-box').setAttribute('y', (cy - 39).toFixed(1));
+    $('tm-nginx-label').setAttribute('y', (cy - 12).toFixed(1));
+    $('tm-node-rps').setAttribute('y', (cy + 3).toFixed(1));
+    $('tm-nginx-sub2').setAttribute('y', (cy + 16).toFixed(1));
+    $('tm-nginx-load-line').setAttribute('y', (cy + 29).toFixed(1));
+    const clientLeg = `M85,${cy.toFixed(1)} C200,${cy.toFixed(1)} 260,${cy.toFixed(1)} 300,${cy.toFixed(1)}`;
+    $('path-client-nginx').setAttribute('d', clientLeg);
+    $('path-client-nginx-visible').setAttribute('d', clientLeg);
+
+    return { top: topMargin, bottom: vbHeight - topMargin, centerY: cy };
+}
+
+function renderBackends(list) {
+    const svgns = 'http://www.w3.org/2000/svg';
+    const guideLayer = $('tm-backend-guides');
+    const boxLayer = $('tm-backend-boxes');
+    guideLayer.innerHTML = '';
+    boxLayer.innerHTML = '';
+    backendMap = {};
+
+    const n = list.length, boxH = 54, boxW = 210, bx = 560;
+    const { top, bottom, centerY } = layoutFlowDiagram(n, boxH);
+    list.forEach((u, i) => {
+        const cy = n === 1 ? centerY : top + boxH/2 + i * ((bottom - top - boxH) / (n - 1));
+        const by = cy - boxH/2;
+        const pathId = 'path-backend-' + i;
+        const d = `M370,${centerY.toFixed(1)} C460,${centerY.toFixed(1)} 490,${cy.toFixed(1)} 560,${cy.toFixed(1)}`;
+
+        const guide = document.createElementNS(svgns, 'path');
+        guide.setAttribute('id', pathId);
+        guide.setAttribute('class', 'tm-path');
+        guide.setAttribute('d', d);
+        guideLayer.appendChild(guide);
+
+        const unreachable = typeof u.path === 'string' && u.path.includes('unreachable');
+        const accent = unreachable ? '#f87171' : '#22d3ee';
+        const site = siteLabel(u);
+
+        const g = document.createElementNS(svgns, 'g');
+        const rect = document.createElementNS(svgns, 'rect');
+        rect.setAttribute('x', bx); rect.setAttribute('y', by.toFixed(1));
+        rect.setAttribute('width', boxW); rect.setAttribute('height', boxH);
+        rect.setAttribute('rx', 9); rect.setAttribute('class', 'tm-node-box');
+        rect.style.stroke = accent;
+        g.appendChild(rect);
+
+        const label = document.createElementNS(svgns, 'text');
+        label.setAttribute('x', bx + boxW/2); label.setAttribute('y', (by+16).toFixed(1));
+        label.setAttribute('text-anchor', 'middle'); label.setAttribute('class', 'tm-node-label');
+        label.style.fill = accent;
+        label.textContent = shortTarget(u.target).slice(0, 30);
+        g.appendChild(label);
+
+        if (site) {
+            const siteEl = document.createElementNS(svgns, 'text');
+            siteEl.setAttribute('x', bx + boxW/2); siteEl.setAttribute('y', (by+29).toFixed(1));
+            siteEl.setAttribute('text-anchor', 'middle'); siteEl.setAttribute('class', 'tm-node-sub');
+            siteEl.style.fill = '#8b949e';
+            siteEl.textContent = site;
+            g.appendChild(siteEl);
+        }
+
+        const sub = document.createElementNS(svgns, 'text');
+        sub.setAttribute('x', bx + boxW/2); sub.setAttribute('y', (by + (site ? 42 : 32)).toFixed(1));
+        sub.setAttribute('text-anchor', 'middle'); sub.setAttribute('class', 'tm-node-sub');
+        sub.setAttribute('id', 'tm-backend-count-' + i);
+        sub.textContent = backendSubText(u);
+        g.appendChild(sub);
+
+        const tip = document.createElementNS(svgns, 'title');
+        tip.textContent = [
+            u.site && u.site !== u.target ? 'Site: ' + u.site : null,
+            'Target: ' + u.target,
+            u.ambiguous ? 'Shared route — multiple sites use this same location, and standard access logs don\'t record the Host header, so this split is a fair-share estimate rather than exact per-site routing.' : null,
+        ].filter(Boolean).join('\n');
+        g.appendChild(tip);
+
+        boxLayer.appendChild(g);
+        backendMap[u.target || '__generic__'] = { pathId, idx: i };
+    });
+}
+
+// ── "All Nodes" mode: Client → Nginx → Node → Proxy Domain ─────────────────
+const TM_FLEET_WIDE_WIDTH = 1180;
+const TM_MAX_DOMAINS_PER_NODE = 5;
+let domainMap = {}; // "nodeName|target" -> {pathId, idx}
+
+function drawFlowBox(layer, {x, y, w, h, accent, lines, tipText}) {
+    const svgns = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(svgns, 'g');
+    const rect = document.createElementNS(svgns, 'rect');
+    rect.setAttribute('x', x); rect.setAttribute('y', y.toFixed(1));
+    rect.setAttribute('width', w); rect.setAttribute('height', h);
+    rect.setAttribute('rx', 9); rect.setAttribute('class', 'tm-node-box');
+    rect.style.stroke = accent;
+    g.appendChild(rect);
+    lines.forEach(line => {
+        const t = document.createElementNS(svgns, 'text');
+        t.setAttribute('x', x + w/2); t.setAttribute('y', (y + line.dy).toFixed(1));
+        t.setAttribute('text-anchor', 'middle'); t.setAttribute('class', line.cls || 'tm-node-sub');
+        t.style.fill = line.fill || '#8b949e';
+        if (line.id) t.setAttribute('id', line.id);
+        t.textContent = line.text;
+        g.appendChild(t);
+    });
+    if (tipText) {
+        const tip = document.createElementNS(svgns, 'title');
+        tip.textContent = tipText;
+        g.appendChild(tip);
+    }
+    layer.appendChild(g);
+    return g;
+}
+
+function renderFleetFlow(nodesSummary) {
+    const guideLayer = $('tm-backend-guides'), boxLayer = $('tm-backend-boxes');
+    const domGuideLayer = $('tm-domain-guides'), domBoxLayer = $('tm-domain-boxes');
+    guideLayer.innerHTML = ''; boxLayer.innerHTML = '';
+    domGuideLayer.innerHTML = ''; domBoxLayer.innerHTML = '';
+    backendMap = {}; domainMap = {};
+
+    // Flatten every node's upstreams (capped per node) into one ordered,
+    // node-grouped domain list, so each node's boxes sit together visually.
+    const domains = [];
+    let totalRealDomains = 0;
+    const nodeRanges = nodesSummary.map(n => {
+        const real = (n.upstreams || []).slice().sort((a, b) => (b.count || 0) - (a.count || 0));
+        totalRealDomains += real.length || 1;
+        const shown = real.length
+            ? real.slice(0, TM_MAX_DOMAINS_PER_NODE)
+            : [{ target: '__none__', path: n.reachable ? '/' : '● unreachable', site: n.name, count: n.total_requests || 0 }];
+        const startIdx = domains.length;
+        shown.forEach(u => domains.push(Object.assign({}, u, { _node: n.name })));
+        return { name: n.name, reachable: n.reachable, total: n.total_requests || 0, startIdx, endIdx: domains.length - 1 };
+    });
+
+    const hidden = totalRealDomains - domains.length;
+    const moreEl = $('tm-flow-more');
+    if (hidden > 0) {
+        moreEl.textContent = '+' + hidden + ' more (lowest traffic, hidden)';
+        moreEl.classList.remove('hidden');
+    } else {
+        moreEl.classList.add('hidden');
+    }
+
+    const n = domains.length, boxH = 54;
+    const { top, bottom, centerY } = layoutFlowDiagram(n, boxH, TM_FLEET_WIDE_WIDTH);
+    const domainCy = domains.map((_, i) => n === 1 ? centerY : top + boxH/2 + i * ((bottom - top - boxH) / (n - 1)));
+
+    const nodeBx = 560, nodeBw = 210, domBx = 920, domBw = 230;
+    nodeRanges.forEach((nr, ni) => {
+        const idxs = [];
+        for (let i = nr.startIdx; i <= nr.endIdx; i++) idxs.push(i);
+        const cy = idxs.reduce((s, i) => s + domainCy[i], 0) / idxs.length;
+        const by = cy - boxH/2;
+        const accent = nr.reachable ? '#22d3ee' : '#f87171';
+        const pathId = 'path-node-' + ni;
+
+        const guide = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        guide.setAttribute('id', pathId);
+        guide.setAttribute('class', 'tm-path');
+        guide.setAttribute('d', `M370,${centerY.toFixed(1)} C460,${centerY.toFixed(1)} 490,${cy.toFixed(1)} ${nodeBx},${cy.toFixed(1)}`);
+        guideLayer.appendChild(guide);
+
+        drawFlowBox(boxLayer, {
+            x: nodeBx, y: by, w: nodeBw, h: boxH, accent,
+            lines: [
+                { dy: 20, cls: 'tm-node-label', fill: accent, text: shortTarget(nr.name).slice(0, 28) },
+                { dy: 34, id: 'tm-fleet-node-' + ni, text: (nr.reachable ? '● online' : '● unreachable') + '  ·  ' + (nr.total || 0).toLocaleString() + ' req' },
+            ],
+            tipText: nr.reachable ? null : (nr.name + ' is unreachable — SSH connection failed.'),
+        });
+        backendMap[nr.name] = { pathId, idx: ni };
+
+        // this node's own Proxy Domain boxes, branching from its box (not Nginx)
+        idxs.forEach(i => {
+            const u = domains[i];
+            const dcy = domainCy[i];
+            const dby = dcy - boxH/2;
+            const dPathId = 'path-domain-' + i;
+            const dAccent = (typeof u.path === 'string' && u.path.includes('unreachable')) ? '#f87171' : '#22d3ee';
+            const site = siteLabel(u);
+
+            const dGuide = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            dGuide.setAttribute('id', dPathId);
+            dGuide.setAttribute('class', 'tm-path');
+            dGuide.setAttribute('d', `M${nodeBx + nodeBw},${cy.toFixed(1)} C${nodeBx + nodeBw + 60},${cy.toFixed(1)} ${domBx - 60},${dcy.toFixed(1)} ${domBx},${dcy.toFixed(1)}`);
+            domGuideLayer.appendChild(dGuide);
+
+            const lines = [{ dy: 16, cls: 'tm-node-label', fill: dAccent, text: shortTarget(u.target).slice(0, 30) }];
+            if (site) lines.push({ dy: 29, fill: '#8b949e', text: site });
+            lines.push({ dy: site ? 42 : 32, id: 'tm-domain-count-' + i, text: backendSubText(u) });
+
+            drawFlowBox(domBoxLayer, {
+                x: domBx, y: dby, w: domBw, h: boxH, accent: dAccent, lines,
+                tipText: [
+                    'Node: ' + nr.name,
+                    u.site && u.site !== u.target ? 'Site: ' + u.site : null,
+                    'Target: ' + u.target,
+                    u.ambiguous ? 'Shared route — split estimate (standard access logs don\'t record the Host header).' : null,
+                ].filter(Boolean).join('\n'),
+            });
+            domainMap[nr.name + '|' + u.target] = { pathId: dPathId, idx: i };
+        });
+    });
+}
+
+function updateFleetFlow(nodesSummary, totalRequests) {
+    const nodes = (nodesSummary && nodesSummary.length) ? nodesSummary : [{ name: 'Local', reachable: true, total_requests: totalRequests || 0, upstreams: [] }];
+    const sig = nodes.map(n => n.name + ':' + (n.upstreams || []).map(u => u.target).join(',')).join('|');
+    if (sig !== backendSignature) {
+        renderFleetFlow(nodes);
+        backendSignature = sig;
+    } else {
+        nodes.forEach((n, ni) => {
+            const el = $('tm-fleet-node-' + ni);
+            if (el) el.textContent = (n.reachable ? '● online' : '● unreachable') + '  ·  ' + (n.total_requests || 0).toLocaleString() + ' req';
+        });
+        // domain sub-text updates: rebuild the same flattened order used at render time
+        let i = 0;
+        nodes.forEach(n => {
+            const real = (n.upstreams || []).slice().sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, TM_MAX_DOMAINS_PER_NODE);
+            const shown = real.length ? real : [{ target: '__none__', path: '/', site: n.name, count: n.total_requests || 0 }];
+            shown.forEach(u => {
+                const el = $('tm-domain-count-' + i);
+                if (el) el.textContent = backendSubText(u);
+                i++;
+            });
+        });
+    }
+}
+
+const TM_MAX_BACKENDS = 10;
+
+function updateBackends(upstreams, totalRequests) {
+    const all = (upstreams && upstreams.length)
+        ? upstreams.slice().sort((a, b) => (b.count || 0) - (a.count || 0))
+        : [{ target: '__generic__', path: '/', site: '__generic__', count: totalRequests || 0 }];
+    const list = all.slice(0, TM_MAX_BACKENDS);
+
+    const moreEl = $('tm-flow-more');
+    const hidden = all.length - list.length;
+    if (hidden > 0) {
+        moreEl.textContent = '+' + hidden + ' more (lowest traffic, hidden)';
+        moreEl.classList.remove('hidden');
+    } else {
+        moreEl.classList.add('hidden');
+    }
+
+    const sig = list.map(u => u.target + ':' + (u.path && u.path.includes('unreachable') ? 'down' : 'up')).join('|');
+    if (sig !== backendSignature) {
+        renderBackends(list);
+        backendSignature = sig;
+    } else {
+        list.forEach((u, i) => {
+            const el = $('tm-backend-count-' + i);
+            if (el) el.textContent = backendSubText(u);
+        });
+    }
+}
+
+// ── Per-request animation: Client → Nginx (arrival pulse) → matched Backend ───
+function handleNewRequest(e) {
+    prependStreamRow(e);
+    spawnLeg('path-client-nginx', '#93c5fd', 650, () => {
+        flash($('tm-nginx-glow'), 'tm-glow-hit');
+        const cls = Math.floor((e.status || 200) / 100);
+        const color = LANE_COLOR[cls] || '#34d399';
+
+        if (ACTIVE_NODE === 'all') {
+            // 3-leg: Client → Nginx (above) → Node → Proxy Domain
+            const nodeHit = backendMap[e.node];
+            if (!nodeHit) return;
+            spawnLeg(nodeHit.pathId, color, 700, () => {
+                const domKey = e.node + '|' + e.upstream_target;
+                let domHit = domainMap[domKey] || domainMap[e.node + '|__none__'];
+                if (!domHit) {
+                    const k = Object.keys(domainMap).find(k => k.startsWith(e.node + '|'));
+                    if (k) domHit = domainMap[k];
+                }
+                if (domHit) spawnLeg(domHit.pathId, color, 700);
+            });
+            return;
+        }
+
+        let target = backendMap[e.upstream_target] || backendMap['__generic__'];
+        if (!target) {
+            const keys = Object.keys(backendMap);
+            if (keys.length) target = backendMap[keys[0]];
+        }
+        if (target) spawnLeg(target.pathId, color, 900);
+    });
+}
+
+// ── Status mix + methods ──────────────────────────────────────────────────────
+function renderStatus(stats) {
+    const s = stats.status_summary || {};
+    const total = stats.total_requests || 0;
+    const pct = k => total ? (s[k] || 0) / total * 100 : 0;
+    $('tm-seg-2xx').style.width = pct('2xx').toFixed(1)+'%';
+    $('tm-seg-3xx').style.width = pct('3xx').toFixed(1)+'%';
+    $('tm-seg-4xx').style.width = pct('4xx').toFixed(1)+'%';
+    $('tm-seg-5xx').style.width = pct('5xx').toFixed(1)+'%';
+
+    const rows = [
+        ['2xx Success', s['2xx']||0, '#34d399'],
+        ['3xx Redirect', s['3xx']||0, '#60a5fa'],
+        ['4xx Client Error', s['4xx']||0, '#fbbf24'],
+        ['5xx Server Error', s['5xx']||0, '#f87171'],
+    ];
+    $('tm-status-list').innerHTML = rows.map(([label,count,color]) => `
+        <div class="flex items-center justify-between">
+            <span class="flex items-center gap-2" style="color:#8b949e">
+                <span class="w-2 h-2 rounded-full inline-block" style="background:${color}"></span>${label}
+            </span>
+            <span style="color:${color};font-weight:700">${count.toLocaleString()}</span>
+        </div>`).join('');
+
+    const methods = stats.methods || {};
+    const maxM = Math.max(1, ...Object.values(methods));
+    $('tm-methods').innerHTML = Object.entries(methods).map(([m,c]) => `
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-bold"
+              style="background:rgba(255,255,255,.04);color:${METHOD_COLOR[m]||'#94a3b8'};border:1px solid rgba(255,255,255,.06)">
+            ${esc(m)} <span style="color:#6e7681;font-weight:500">${c}</span>
+        </span>`).join('') || '<span class="text-xs" style="color:#484f58">No data</span>';
+}
+
+function renderLeaderboard(elId, items, key, color) {
+    const max = Math.max(1, ...items.map(i => i.count));
+    $(elId).innerHTML = items.length ? items.map(i => `
+        <div>
+            <div class="flex items-center justify-between text-xs mb-1">
+                <span class="font-mono truncate" style="color:#c9d1d9;max-width:70%" title="${esc(i[key])}">${esc(i[key])}</span>
+                <span class="font-mono font-bold" style="color:${color}">${i.count.toLocaleString()}</span>
+            </div>
+            <div class="tm-bar-wrap h-1.5">
+                <div class="tm-bar-fill h-full" style="width:${(i.count/max*100).toFixed(1)}%;background:${color}"></div>
+            </div>
+        </div>`).join('') : '<p class="text-xs" style="color:#484f58">No data yet</p>';
+}
+
+// ── Canvas rate chart (animated via rAF easing toward new targets) ────────────
+function drawChart() {
+    const canvas = $('tm-chart');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0) return;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,rect.width,rect.height);
+
+    const n = chartDisplay.length;
+    const max = Math.max(1, ...chartTarget);
+    const gap = 3;
+    const bw = (rect.width - gap*(n-1)) / n;
+
+    for (let i=0;i<n;i++) {
+        const v = chartDisplay[i];
+        const h = Math.max(1, (v/max) * (rect.height - 6));
+        const x = i * (bw+gap);
+        const y = rect.height - h;
+        const isLast = i === n-1;
+        const grad = ctx.createLinearGradient(0,y,0,rect.height);
+        if (isLast) { grad.addColorStop(0,'#6ee7b7'); grad.addColorStop(1,'#059669'); }
+        else        { grad.addColorStop(0,'#22d3ee'); grad.addColorStop(1,'#0e7490'); }
+        ctx.fillStyle = grad;
+        ctx.globalAlpha = isLast ? 1 : 0.55 + (i/n)*0.35;
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(x,y,bw,h,[2,2,0,0]) : ctx.rect(x,y,bw,h);
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+}
+
+function animateChart() {
+    let moving = false;
+    for (let i=0;i<chartDisplay.length;i++) {
+        const d = chartTarget[i] - chartDisplay[i];
+        if (Math.abs(d) > 0.05) { chartDisplay[i] += d * 0.18; moving = true; }
+        else chartDisplay[i] = chartTarget[i];
+    }
+    drawChart();
+    if (moving) requestAnimationFrame(animateChart);
+    else rafRunning = false;
+}
+
+function setChartTargets(buckets) {
+    chartTarget = buckets.map(b => b.requests);
+    if (chartDisplay.length !== chartTarget.length) chartDisplay = chartTarget.slice();
+    if (!rafRunning) { rafRunning = true; requestAnimationFrame(animateChart); }
+}
+
+// ── Live stream rows ───────────────────────────────────────────────────────────
+function prependStreamRow(e) {
+    const tbody = $('tm-stream-body');
+    if (tbody.firstElementChild && tbody.firstElementChild.dataset.empty) tbody.innerHTML = '';
+    const sc = STATUS_FG(e.status);
+    const mc = METHOD_COLOR[e.method] || '#94a3b8';
+    const time = e.dt_iso ? new Date(e.dt_iso).toLocaleTimeString() : '';
+    const row = document.createElement('tr');
+    row.className = 'tm-row-in';
+    row.style.borderBottom = '1px solid rgba(48,54,61,.6)';
+    const nodeCell = ACTIVE_NODE === 'all'
+        ? `<td style="padding:6px 12px;white-space:nowrap"><span style="padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;background:rgba(168,85,247,.15);color:#c084fc">${esc(e.node||'-')}</span></td>`
+        : '';
+    row.innerHTML = `
+        <td style="padding:6px 12px;color:#6e7681;white-space:nowrap">${esc(time)}</td>
+        ${nodeCell}
+        <td style="padding:6px 12px;color:#818cf8;white-space:nowrap">${esc(e.ip||'-')}</td>
+        <td style="padding:6px 12px;color:${mc};font-weight:700;white-space:nowrap">${esc(e.method||'-')}</td>
+        <td style="padding:6px 12px;color:#c9d1d9" title="${esc(e.path||'')}">${esc(e.path||'-')}</td>
+        <td style="padding:6px 12px;color:${sc};font-weight:700;text-align:center">${e.status ?? '-'}</td>
+        <td style="padding:6px 12px;color:#484f58;text-align:right;white-space:nowrap">${fmtBytes(e.bytes||0)}</td>
+    `;
+    tbody.insertBefore(row, tbody.firstChild);
+    while (tbody.children.length > 40) tbody.removeChild(tbody.lastChild);
+}
+
+// ── Main apply ──────────────────────────────────────────────────────────────
+function applyStats(stats) {
+    hideFlowLoading();
+    if (stats.error) {
+        $('tm-updated').textContent = 'Error: ' + stats.error;
+        $('tm-updated').style.color = '#f87171';
+        return;
+    }
+    $('tm-updated').style.color = '';
+    $('tm-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+    $('tm-total').textContent = (stats.total_requests || 0).toLocaleString();
+    $('tm-rps').textContent = (stats.requests_per_sec || 0).toFixed(2);
+    $('tm-throughput').textContent = fmtBytesRate(stats.bytes_per_sec || 0);
+    $('tm-total-bytes').textContent = 'total: ' + fmtBytes(stats.total_bytes || 0);
+    $('tm-error-rate').textContent = (stats.error_rate || 0).toFixed(1) + '%';
+    const s = stats.status_summary || {};
+    $('tm-error-count').textContent = ((s['4xx']||0)+(s['5xx']||0)).toLocaleString() + ' of ' + (stats.total_requests||0).toLocaleString();
+    $('tm-node-rps').textContent = (stats.requests_per_sec || 0).toFixed(1) + ' req/s';
+    $('tm-node-clients').textContent = (stats.total_requests || 0).toLocaleString() + ' requests';
+    pulseNginx(stats.requests_per_sec || 0);
+    updateNginxLoad(stats.cpu_percent, stats.ram_percent);
+
+    renderStatus(stats);
+    renderLeaderboard('tm-top-paths', stats.top_paths || [], 'path', '#fbbf24');
+    renderLeaderboard('tm-top-ips', stats.top_ips || [], 'ip', '#38bdf8');
+    setChartTargets(stats.timeseries || []);
+    if (ACTIVE_NODE === 'all') {
+        updateFleetFlow(stats.nodes || [], stats.total_requests || 0);
+    } else {
+        updateBackends(stats.upstreams || [], stats.total_requests || 0);
+    }
+
+    // New requests since last poll → animate flow + stream, newest-first list
+    const recent = stats.recent || [];
+    const fresh = [];
+    for (const e of recent) {
+        if (!e.raw || seenRaw.has(e.raw)) continue;
+        seenRaw.add(e.raw);
+        fresh.push(e);
+    }
+    // recent[] is newest-first; replay oldest-of-the-new-batch first so the stream reads chronologically
+    fresh.reverse().forEach((e, i) => {
+        setTimeout(() => handleNewRequest(e), i * 130);
+    });
+
+    // keep the seen-set from growing forever
+    if (seenRaw.size > 4000) {
+        const keep = recent.map(e => e.raw).filter(Boolean);
+        seenRaw = new Set(keep);
+    }
+}
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+function statsUrl() {
+    const lines = $('tm-lines').value;
+    if (ACTIVE_NODE === 'all')   return `/api/traffic/all?lines=${lines}`;
+    if (ACTIVE_NODE !== 'local') return `/api/nodes/${ACTIVE_NODE}/traffic?lines=${lines}`;
+    return `/api/traffic/stats?lines=${lines}`;
+}
+
+// "All Nodes" fans out over SSH to every configured node on each poll —
+// back off the interval so a large fleet doesn't get hammered every 2s.
+function pollIntervalMs() {
+    return ACTIVE_NODE === 'all' ? 6000 : 2000;
+}
+
+async function poll() {
+    if (paused) return;
+    try {
+        const res = await fetch(statsUrl());
+        const stats = await res.json();
+        applyStats(stats);
+    } catch (e) {
+        hideFlowLoading();
+        $('tm-updated').textContent = 'Connection error: ' + e.message;
+        $('tm-updated').style.color = '#f87171';
+    }
+}
+
+function scheduleNextPoll() {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(async () => { await poll(); scheduleNextPoll(); }, pollIntervalMs());
+}
+
+function tmSetLines() { seenRaw.clear(); poll(); }
+
+// ── Node tabs ────────────────────────────────────────────────────────────────
+function tmUpdateNodeTabStyles() {
+    const allBtn = $('tm-tab-all');
+    if (allBtn) allBtn.className = 'tm-node-tab' + (ACTIVE_NODE === 'all' ? ' active-all' : '');
+    const localBtn = $('tm-tab-local');
+    if (localBtn) localBtn.className = 'tm-node-tab' + (ACTIVE_NODE === 'local' ? ' active-local' : '');
+    ALL_NODES.forEach(n => {
+        const btn = $('tm-tab-' + n.id);
+        if (btn) btn.className = 'tm-node-tab' + (ACTIVE_NODE === n.id ? ' active-remote' : '');
+    });
+    const flowSub = $('tm-flow-subtitle');
+    if (flowSub) {
+        flowSub.textContent = ACTIVE_NODE === 'all'
+            ? 'Client → Nginx → Node (fleet-wide)'
+            : 'Client → Nginx → Upstream Service (live proxy_pass routing)';
+    }
+}
+
+function tmUpdatePageTitle() {
+    const el = $('page-title-text');
+    if (!el) return;
+    if (ACTIVE_NODE === 'all') {
+        el.textContent = 'Traffic Monitor — All Nodes';
+    } else if (ACTIVE_NODE === 'local') {
+        el.textContent = 'Traffic Monitor';
+    } else {
+        const node = ALL_NODES.find(n => n.id === ACTIVE_NODE);
+        el.textContent = 'Traffic Monitor' + (node ? ' — ' + node.name : '');
+    }
+}
+
+function tmNodeLabel(id) {
+    if (id === 'all') return 'All Nodes';
+    if (id === 'local') return 'Local';
+    const node = ALL_NODES.find(n => n.id === id);
+    return node ? node.name : id;
+}
+
+function showFlowLoading(label) {
+    const el = $('tm-flow-loading');
+    if (!el) return;
+    $('tm-flow-loading-text').textContent = 'Loading ' + label + '…';
+    el.style.display = 'flex';
+}
+
+function hideFlowLoading() {
+    const el = $('tm-flow-loading');
+    if (el) el.style.display = 'none';
+}
+
+function tmSelectNode(id) {
+    if (id === ACTIVE_NODE) return;
+    ACTIVE_NODE = id;
+    // keep the sidebar / other pages' active node in sync — "all" is a
+    // Traffic-Monitor-only pseudo-node, other pages don't understand it
+    if (id !== 'all') {
+        document.cookie = 'active_node=' + encodeURIComponent(id) + '; path=/; max-age=604800; SameSite=Lax';
+    }
+
+    // reset all per-node client-side state — a different node (or the
+    // fleet-wide view) has an unrelated log, backend set, and history
+    seenRaw = new Set();
+    backendMap = {};
+    domainMap = {};
+    backendSignature = '';
+    chartDisplay = new Array(30).fill(0);
+    chartTarget = new Array(30).fill(0);
+    $('tm-stream-body').innerHTML = '<tr><td style="padding:24px;color:#484f58;text-align:center">Waiting for traffic…</td></tr>';
+    $('tm-updated').textContent = 'Connecting…';
+    $('tm-updated').style.color = '';
+    showFlowLoading(tmNodeLabel(id));
+
+    tmUpdateNodeTabStyles();
+    tmUpdatePageTitle();
+    scheduleNextPoll();
+    poll();
+}
+
+function tmPingNodeTab(id) {
+    fetch('/api/nodes/' + id + '/ping')
+        .then(r => r.json())
+        .then(d => {
+            const dot = $('tm-tab-dot-' + id);
+            if (dot) dot.style.background = d.ok ? '#22c55e' : '#f87171';
+        }).catch(() => {});
+}
+
+function tmTogglePause() {
+    paused = !paused;
+    $('tm-pause-label').textContent = paused ? 'Resume' : 'Pause';
+    $('tm-live-label').textContent = paused ? 'PAUSED' : 'LIVE';
+    $('tm-live-dot').style.animationPlayState = paused ? 'paused' : 'running';
+    $('tm-live-dot').style.background = paused ? '#6e7681' : '';
+    if (!paused) poll();
+}
+
+// ── Fullscreen ────────────────────────────────────────────────────────────────
+const TM_FS_ENTER_ICON = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>';
+const TM_FS_EXIT_ICON  = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4l6 6M20 4l-6 6M4 20l6-6M20 20l-6-6"/>';
+
+function tmFullscreenEl() {
+    return document.fullscreenElement || document.webkitFullscreenElement ||
+           document.mozFullScreenElement || document.msFullscreenElement || null;
+}
+
+function tmRequestFullscreen(el) {
+    const req = el.requestFullscreen || el.webkitRequestFullscreen ||
+                el.mozRequestFullScreen || el.msRequestFullscreen;
+    if (req) req.call(el);
+}
+
+function tmExitFullscreen() {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen ||
+                 document.mozCancelFullScreen || document.msExitFullscreen;
+    if (exit) exit.call(document);
+}
+
+function tmToggleFullscreen() {
+    if (!tmFullscreenEl()) tmRequestFullscreen($('tm-fullscreen-root'));
+    else tmExitFullscreen();
+}
+
+function tmToggleFlowFullscreen() {
+    if (tmFullscreenEl() === $('tm-flow-panel')) tmExitFullscreen();
+    else tmRequestFullscreen($('tm-flow-panel'));
+}
+
+function tmOnFullscreenChange() {
+    const current = tmFullscreenEl();
+    const isRootFs = current === $('tm-fullscreen-root');
+    const isFlowFs = current === $('tm-flow-panel');
+
+    $('tm-fullscreen-label').textContent = isRootFs ? 'Exit Fullscreen' : 'Fullscreen';
+    $('tm-fullscreen-icon').innerHTML = isRootFs ? TM_FS_EXIT_ICON : TM_FS_ENTER_ICON;
+
+    $('tm-flow-fs-icon').innerHTML = isFlowFs ? TM_FS_EXIT_ICON : TM_FS_ENTER_ICON;
+    $('tm-flow-fs-btn').title = isFlowFs ? 'Exit fullscreen' : 'Fullscreen this diagram';
+
+    // canvas dims depend on layout, which just changed size
+    setTimeout(drawChart, 60);
+}
+
+['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange']
+    .forEach(evt => document.addEventListener(evt, tmOnFullscreenChange));
+
+window.addEventListener('resize', drawChart);
+tmUpdateNodeTabStyles();
+tmUpdatePageTitle();
+ALL_NODES.forEach(n => tmPingNodeTab(n.id));
+scheduleNextPoll();
+poll();
+</script>
+{% endblock %}

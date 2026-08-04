@@ -1,3 +1,4 @@
 .env
 .deploy.sh
 push_dockerhub.sh
+CLAUDE.md

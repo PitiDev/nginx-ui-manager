@@ -4,44 +4,64 @@
 
 {% block content %}
 
+<!-- ── Node Selector Bar (shown only when remote nodes are configured) ──────── -->
+{% if nodes %}
+<div class="flex items-center gap-2 flex-wrap mb-4 p-3 bg-white rounded-2xl border border-gray-100 shadow-sm">
+    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1 flex-shrink-0">Node:</span>
+
+    <!-- Local / Default -->
+    <button id="nsel-local" onclick="selectNode('local')"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-nginx-light text-nginx border-2 border-nginx transition-all">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+        </svg>
+        Local (default)
+    </button>
+
+    <!-- Remote nodes -->
+    {% for node in nodes %}
+    <button id="nsel-{{ node.id }}" onclick="selectNode('{{ node.id }}')"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white text-gray-500 border-2 border-gray-200 hover:border-gray-300 hover:text-gray-700 transition-all">
+        <span id="ndot-{{ node.id }}" class="w-1.5 h-1.5 rounded-full bg-gray-300 flex-shrink-0"></span>
+        {{ node.name }}
+        <span class="font-mono font-normal text-gray-400 text-xs">({{ node.host }})</span>
+    </button>
+    {% endfor %}
+
+    <!-- Selected node label -->
+    <span id="node-label" class="ml-auto text-xs text-gray-400 hidden">Viewing remote node</span>
+</div>
+{% endif %}
+
 <!-- ── Nginx Status Hero ──────────────────────────────────────────────────── -->
 <div class="relative overflow-hidden rounded-2xl shadow-lg mb-6 border border-slate-700"
      style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f2419 100%);">
-    <!-- Subtle grid overlay -->
     <div class="absolute inset-0 opacity-5"
          style="background-image: linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);background-size:32px 32px;"></div>
-    <!-- Glow accent -->
     <div class="absolute -top-10 -right-10 w-64 h-64 rounded-full opacity-10"
          style="background: radial-gradient(circle, #009639 0%, transparent 70%);"></div>
 
     <div class="relative px-6 py-5">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
 
-            <!-- Left: Brand + status -->
             <div class="flex items-center gap-4">
                 <div class="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg"
                      style="background: rgba(0,150,57,0.2); border: 1px solid rgba(0,150,57,0.4);">
                     <svg class="w-7 h-7 text-nginx" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                              d="M5 3l14 9-14 9V3z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 3l14 9-14 9V3z"/>
                     </svg>
                 </div>
                 <div>
                     <div class="flex items-center gap-3 mb-1 flex-wrap">
-                        <h2 class="text-white font-bold text-xl tracking-tight">Nginx Web Server</h2>
-                        <!-- status badge -->
+                        <h2 id="hero-title" class="text-white font-bold text-xl tracking-tight">Nginx Web Server</h2>
                         <span id="hero-badge"
                               class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold
                               {% if status.active %}bg-green-500/20 text-green-300 border border-green-500/30
                               {% else %}bg-red-500/20 text-red-300 border border-red-500/30{% endif %}">
                             <span class="relative flex h-2 w-2">
-                                {% if status.active %}
-                                <span id="hero-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                <span id="hero-dot" class="relative inline-flex rounded-full h-2 w-2 bg-green-400"></span>
-                                {% else %}
-                                <span id="hero-ping" class="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                <span id="hero-dot" class="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
-                                {% endif %}
+                                <span id="hero-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full {% if status.active %}bg-green-400{% else %}bg-red-400{% endif %} opacity-75"></span>
+                                <span id="hero-dot"  class="relative inline-flex rounded-full h-2 w-2 {% if status.active %}bg-green-400{% else %}bg-red-400{% endif %}"></span>
                             </span>
                             <span id="hero-status">{% if status.active %}Active{% else %}Inactive{% endif %}</span>
                         </span>
@@ -50,16 +70,15 @@
                 </div>
             </div>
 
-            <!-- Right: key stats -->
             <div class="flex items-center gap-6 sm:gap-8">
                 <div class="text-center sm:text-right">
                     <p class="text-slate-500 text-xs uppercase tracking-wider font-semibold mb-0.5">Uptime</p>
-                    <p class="text-white font-bold text-lg leading-tight">{{ status.uptime or '–' }}</p>
+                    <p id="hero-uptime" class="text-white font-bold text-lg leading-tight">{{ status.uptime or '–' }}</p>
                 </div>
                 <div class="w-px h-8 bg-slate-700"></div>
                 <div class="text-center sm:text-right">
                     <p class="text-slate-500 text-xs uppercase tracking-wider font-semibold mb-0.5">Sites Active</p>
-                    <p class="text-white font-bold text-lg leading-tight">
+                    <p id="hero-sites" class="text-white font-bold text-lg leading-tight">
                         {{ enabled_sites }}<span class="text-slate-500 font-normal text-sm"> / {{ total_sites }}</span>
                     </p>
                 </div>
@@ -69,13 +88,45 @@
                     <p id="last-refresh" class="text-slate-300 text-sm font-mono leading-tight">–</p>
                 </div>
             </div>
-
         </div>
     </div>
 </div>
 
 <!-- ── System Metrics Row ─────────────────────────────────────────────────── -->
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+<div class="flex items-center justify-between mb-3">
+    <span id="metrics-label" class="text-xs font-semibold text-gray-500 uppercase tracking-wider">System Metrics</span>
+    <span id="metrics-loading" class="hidden text-xs text-gray-400 flex items-center gap-1">
+        <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        Loading remote metrics…
+    </span>
+</div>
+
+<!-- Metrics error banner (hidden until stats.error fires) -->
+<div id="metrics-error" class="hidden mb-3 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+    <svg class="w-5 h-5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <span class="flex-1">
+        <span id="metrics-error-label" class="font-semibold">Metrics unavailable — </span>
+        <span id="metrics-error-msg" class="font-mono text-xs"></span>
+    </span>
+    <a id="metrics-debug-link" href="/api/debug/stats" target="_blank"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-semibold transition-colors whitespace-nowrap mr-1">
+        Debug
+    </a>
+    <button id="metrics-retry-btn" onclick="retryStats()"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-semibold transition-colors whitespace-nowrap">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Retry
+    </button>
+</div>
+
+<div id="metrics-row" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
 
     <!-- CPU -->
     <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -87,18 +138,15 @@
             <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
                 <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                          d="M9 3H7a2 2 0 00-2 2v2M9 3h6M9 3v0M15 3h2a2 2 0 012 2v2M15 3v0M21 9v6M21 9h0M21 15v2a2 2 0 01-2 2h-2M21 15h0M15 21H9M15 21v0M9 21H7a2 2 0 01-2-2v-2M9 21v0M3 15V9M3 15h0M3 9v0"/>
+                          d="M9 3H7a2 2 0 00-2 2v2M9 3h6M15 3h2a2 2 0 012 2v2M21 9v6M21 15v2a2 2 0 01-2 2h-2M15 21H9M9 21H7a2 2 0 01-2-2v-2M3 15V9"/>
                 </svg>
             </div>
         </div>
-        <!-- Ring -->
         <div class="flex items-center gap-3">
             <div class="relative flex-shrink-0 w-14 h-14">
                 <svg class="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
                     <circle cx="18" cy="18" r="15.9" fill="none" stroke="#eff6ff" stroke-width="3.5"/>
-                    <circle id="cpu-ring" cx="18" cy="18" r="15.9" fill="none"
-                            stroke="#3b82f6" stroke-width="3.5" stroke-linecap="round"
-                            stroke-dasharray="0 100"/>
+                    <circle id="cpu-ring" cx="18" cy="18" r="15.9" fill="none" stroke="#3b82f6" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="0 100"/>
                 </svg>
                 <div class="absolute inset-0 flex items-center justify-center">
                     <span class="text-xs font-bold text-blue-600" id="cpu-ring-txt">0</span>
@@ -132,9 +180,7 @@
             <div class="relative flex-shrink-0 w-14 h-14">
                 <svg class="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
                     <circle cx="18" cy="18" r="15.9" fill="none" stroke="#f5f3ff" stroke-width="3.5"/>
-                    <circle id="ram-ring" cx="18" cy="18" r="15.9" fill="none"
-                            stroke="#8b5cf6" stroke-width="3.5" stroke-linecap="round"
-                            stroke-dasharray="0 100"/>
+                    <circle id="ram-ring" cx="18" cy="18" r="15.9" fill="none" stroke="#8b5cf6" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="0 100"/>
                 </svg>
                 <div class="absolute inset-0 flex items-center justify-center">
                     <span class="text-xs font-bold text-violet-600" id="ram-ring-txt">0</span>
@@ -168,9 +214,7 @@
             <div class="relative flex-shrink-0 w-14 h-14">
                 <svg class="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
                     <circle cx="18" cy="18" r="15.9" fill="none" stroke="#fffbeb" stroke-width="3.5"/>
-                    <circle id="disk-ring" cx="18" cy="18" r="15.9" fill="none"
-                            stroke="#f59e0b" stroke-width="3.5" stroke-linecap="round"
-                            stroke-dasharray="0 100"/>
+                    <circle id="disk-ring" cx="18" cy="18" r="15.9" fill="none" stroke="#f59e0b" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="0 100"/>
                 </svg>
                 <div class="absolute inset-0 flex items-center justify-center">
                     <span class="text-xs font-bold text-amber-600" id="disk-ring-txt">0</span>
@@ -203,18 +247,14 @@
         <div class="space-y-2.5">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-1.5">
-                    <svg class="w-3 h-3 text-cyan-500" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 4l-8 8h5v8h6v-8h5z"/>
-                    </svg>
+                    <svg class="w-3 h-3 text-cyan-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4l-8 8h5v8h6v-8h5z"/></svg>
                     <span class="text-xs text-gray-500">RX</span>
                 </div>
                 <span id="net-rx" class="text-xs font-semibold text-gray-700 font-mono">–/s</span>
             </div>
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-1.5">
-                    <svg class="w-3 h-3 text-orange-400 rotate-180" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 4l-8 8h5v8h6v-8h5z"/>
-                    </svg>
+                    <svg class="w-3 h-3 text-orange-400 rotate-180" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4l-8 8h5v8h6v-8h5z"/></svg>
                     <span class="text-xs text-gray-500">TX</span>
                 </div>
                 <span id="net-tx" class="text-xs font-semibold text-gray-700 font-mono">–/s</span>
@@ -230,20 +270,20 @@
             </div>
         </div>
     </div>
-
 </div>
 
-<!-- ── Bottom Row: Sites + Quick Actions + Status ─────────────────────────── -->
+<!-- ── Bottom Row ─────────────────────────────────────────────────────────── -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
 
-    <!-- Sites Overview (spans 2/3) -->
+    <!-- Sites Overview -->
     <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm">
         <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 <div class="w-1 h-5 rounded-full bg-nginx"></div>
                 <h3 class="text-sm font-semibold text-gray-800">Sites Overview</h3>
+                <span id="sites-node-tag" class="hidden text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium"></span>
             </div>
-            <a href="/configs"
+            <a id="sites-manage-link" href="/configs"
                class="text-xs font-medium text-nginx hover:text-nginx-dark flex items-center gap-1 transition-colors">
                 Manage
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -252,54 +292,48 @@
             </a>
         </div>
         <div class="p-5">
-            <!-- Progress bar -->
             <div class="flex items-end gap-3 mb-4">
                 <div class="flex-1">
                     <div class="flex items-center justify-between mb-2">
                         <span class="text-xs text-gray-500 font-medium">Enabled Sites</span>
-                        <span class="text-xs font-bold text-gray-700">{{ enabled_sites }} / {{ total_sites }}</span>
+                        <span id="sites-fraction" class="text-xs font-bold text-gray-700">{{ enabled_sites }} / {{ total_sites }}</span>
                     </div>
                     <div class="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                        {% if total_sites > 0 %}
-                        <div class="h-full bg-nginx rounded-full transition-all duration-700"
-                             style="width: {{ (enabled_sites / total_sites * 100)|int }}%"></div>
-                        {% else %}
-                        <div class="h-full bg-gray-200 rounded-full" style="width:0%"></div>
-                        {% endif %}
+                        <div id="sites-bar" class="h-full bg-nginx rounded-full transition-all duration-700"
+                             style="width: {% if total_sites > 0 %}{{ (enabled_sites / total_sites * 100)|int }}{% else %}0{% endif %}%"></div>
                     </div>
                 </div>
                 <div class="flex-shrink-0 text-right">
-                    <p class="text-3xl font-black text-nginx leading-none">{{ enabled_sites }}</p>
+                    <p id="sites-enabled-big" class="text-3xl font-black text-nginx leading-none">{{ enabled_sites }}</p>
                     <p class="text-xs text-gray-400 mt-0.5">active</p>
                 </div>
             </div>
-
-            <!-- Stats grid -->
             <div class="grid grid-cols-3 gap-3">
                 <div class="bg-green-50 rounded-xl p-3 text-center">
-                    <p class="text-2xl font-bold text-green-600">{{ enabled_sites }}</p>
+                    <p id="sites-card-enabled" class="text-2xl font-bold text-green-600">{{ enabled_sites }}</p>
                     <p class="text-xs text-green-600/70 font-medium mt-0.5">Enabled</p>
                 </div>
                 <div class="bg-slate-50 rounded-xl p-3 text-center">
-                    <p class="text-2xl font-bold text-slate-600">{{ total_sites - enabled_sites }}</p>
+                    <p id="sites-card-disabled" class="text-2xl font-bold text-slate-600">{{ total_sites - enabled_sites }}</p>
                     <p class="text-xs text-slate-500 font-medium mt-0.5">Disabled</p>
                 </div>
                 <div class="bg-blue-50 rounded-xl p-3 text-center">
-                    <p class="text-2xl font-bold text-blue-600">{{ total_sites }}</p>
+                    <p id="sites-card-total" class="text-2xl font-bold text-blue-600">{{ total_sites }}</p>
                     <p class="text-xs text-blue-600/70 font-medium mt-0.5">Total</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Quick Actions (admin only) or Status Card -->
+    <!-- Quick Actions -->
     {% if current_user and current_user.role == 'admin' %}
     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm">
         <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
             <div class="w-1 h-5 rounded-full bg-amber-400"></div>
             <h3 class="text-sm font-semibold text-gray-800">Quick Actions</h3>
         </div>
-        <div class="p-4 space-y-2.5">
+        <div id="quick-actions" class="p-4 space-y-2.5">
+            <!-- Local actions (default, replaced by JS for remote nodes) -->
             <form method="post" action="/nginx/reload">
                 <button type="submit"
                         class="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-nginx text-white text-sm font-medium hover:bg-nginx-dark transition-colors shadow-sm">
@@ -328,8 +362,7 @@
             <a href="/logs"
                class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
                 </svg>
                 View Logs
             </a>
@@ -350,39 +383,31 @@
             <h3 class="text-sm font-semibold text-gray-800">Navigation</h3>
         </div>
         <div class="p-4 space-y-2.5">
-            <a href="/configs"
-               class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+            <a href="/configs" class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
                 View Configs
             </a>
-            <a href="/ssl"
-               class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+            <a href="/ssl" class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                 </svg>
                 SSL Certificates
             </a>
-            <a href="/logs"
-               class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+            <a href="/logs" class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
-                          d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
                 </svg>
                 View Logs
             </a>
         </div>
     </div>
     {% endif %}
-
 </div>
 
-<!-- ── systemctl Status Terminal ─────────────────────────────────────────── -->
-{% if status.status_detail %}
-<div class="bg-white rounded-2xl border border-gray-100 shadow-sm">
+<!-- ── Status Terminal ────────────────────────────────────────────────────── -->
+<div id="status-terminal" class="bg-white rounded-2xl border border-gray-100 shadow-sm {% if not status.status_detail %}hidden{% endif %}">
     <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
         <div class="flex items-center gap-2.5">
             <div class="w-1 h-5 rounded-full bg-slate-400"></div>
@@ -390,7 +415,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
             </svg>
-            <span class="text-sm font-semibold text-gray-700">systemctl status nginx</span>
+            <span id="terminal-title" class="text-sm font-semibold text-gray-700">systemctl status nginx</span>
         </div>
         <div class="flex items-center gap-1.5">
             <div class="w-2.5 h-2.5 rounded-full bg-red-400"></div>
@@ -399,128 +424,389 @@
         </div>
     </div>
     <div class="p-4">
-        <pre class="text-xs font-mono text-slate-300 whitespace-pre-wrap rounded-xl p-4 overflow-auto max-h-56 leading-relaxed"
+        <pre id="terminal-body" class="text-xs font-mono text-slate-300 whitespace-pre-wrap rounded-xl p-4 overflow-auto max-h-56 leading-relaxed"
              style="background:#0d1117;">{{ status.status_detail }}</pre>
     </div>
 </div>
-{% endif %}
 
-<!-- ── Auto-refresh JS ────────────────────────────────────────────────────── -->
+<!-- ── JS ────────────────────────────────────────────────────────────────── -->
 <script>
-let _prevNet = null, _prevNetTs = null;
+// ── Server-rendered snapshots ─────────────────────────────────────────────
+const NODES = {{ nodes | tojson }};
+const LOCAL_SNAP = {
+    active:        {{ status.active | tojson }},
+    status_text:   {{ ('Active' if status.active else 'Inactive') | tojson }},
+    version:       {{ (status.version  or '') | tojson }},
+    uptime:        {{ (status.uptime   or '') | tojson }},
+    status_detail: {{ (status.status_detail or '') | tojson }},
+};
+const LOCAL_SITES = { enabled: {{ enabled_sites }}, total: {{ total_sites }} };
+
+// ── Button style constants ────────────────────────────────────────────────
+const SEL_LOCAL  = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-nginx-light text-nginx border-2 border-nginx transition-all';
+const SEL_REMOTE = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 text-blue-600 border-2 border-blue-300 transition-all';
+const SEL_OFF    = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white text-gray-500 border-2 border-gray-200 hover:border-gray-300 hover:text-gray-700 transition-all';
+
+// ── State ─────────────────────────────────────────────────────────────────
+// Source of truth: server-rendered cookie value (active_node_id from tmpl())
+let _node       = {{ active_node_id | tojson }};
+let _timer      = null;
+let _prevNet    = null, _prevNetTs = null;
+const IS_ADMIN  = {{ ('true' if current_user and current_user.role == 'admin' else 'false') }};
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function $(id) { return document.getElementById(id); }
+function set(id, v) { const el=$(id); if(el) el.textContent=v; }
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function fmtRate(bps) {
     if (bps < 0 || isNaN(bps)) return '–';
-    if (bps >= 1e6) return (bps / 1e6).toFixed(1) + ' MB/s';
-    if (bps >= 1e3) return (bps / 1e3).toFixed(1) + ' KB/s';
-    return Math.round(bps) + ' B/s';
+    if (bps >= 1e6) return (bps/1e6).toFixed(1)+' MB/s';
+    if (bps >= 1e3) return (bps/1e3).toFixed(1)+' KB/s';
+    return Math.round(bps)+' B/s';
 }
-
 function fmtBytes(b) {
-    if (b >= 1e9) return (b / 1e9).toFixed(1) + ' GB';
-    if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB';
-    if (b >= 1e3) return (b / 1e3).toFixed(1) + ' KB';
-    return b + ' B';
+    if (b>=1e9) return (b/1e9).toFixed(1)+' GB';
+    if (b>=1e6) return (b/1e6).toFixed(1)+' MB';
+    if (b>=1e3) return (b/1e3).toFixed(1)+' KB';
+    return b+' B';
 }
-
-function set(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
-
 function setGauge(ringId, barId, txtId, pct) {
-    const v = Math.min(Math.max(pct, 0), 100).toFixed(1);
-    const ring = document.getElementById(ringId);
-    const bar  = document.getElementById(barId);
-    const txt  = document.getElementById(txtId);
-    if (ring) ring.setAttribute('stroke-dasharray', v + ' 100');
-    if (bar)  bar.style.width = v + '%';
-    if (txt)  txt.textContent = Math.round(v) + '%';
-
-    // Color shift when high usage
-    const high = pct > 85;
-    const colors = { 'cpu-ring': [high ? '#ef4444' : '#3b82f6', high ? '#fee2e2' : '#eff6ff'],
-                     'ram-ring': [high ? '#ef4444' : '#8b5cf6', high ? '#fee2e2' : '#f5f3ff'],
-                     'disk-ring':[high ? '#ef4444' : '#f59e0b', high ? '#fee2e2' : '#fffbeb'] };
-    if (colors[ringId] && ring) {
-        ring.setAttribute('stroke', colors[ringId][0]);
-        const track = ring.previousElementSibling;
-        if (track) track.setAttribute('stroke', colors[ringId][1]);
+    const v = Math.min(Math.max(pct,0),100).toFixed(1);
+    const ring=$( ringId), bar=$(barId), txt=$(txtId);
+    if (ring) ring.setAttribute('stroke-dasharray', v+' 100');
+    if (bar)  bar.style.width = v+'%';
+    if (txt)  txt.textContent = Math.round(v)+'%';
+    const high = pct>85;
+    const map = {'cpu-ring':[high?'#ef4444':'#3b82f6',high?'#fee2e2':'#eff6ff'],
+                 'ram-ring':[high?'#ef4444':'#8b5cf6',high?'#fee2e2':'#f5f3ff'],
+                 'disk-ring':[high?'#ef4444':'#f59e0b',high?'#fee2e2':'#fffbeb']};
+    if (map[ringId]&&ring) {
+        ring.setAttribute('stroke', map[ringId][0]);
+        const t=ring.previousElementSibling; if(t) t.setAttribute('stroke',map[ringId][1]);
     }
 }
 
-async function refresh() {
-    try {
-        const [stats, nginxSt] = await Promise.all([
-            fetch('/api/system/stats').then(r => r.json()),
-            fetch('/api/nginx/status').then(r => r.json()),
-        ]);
+// ── Hero update ───────────────────────────────────────────────────────────
+function updateHero(st) {
+    if (!st) return;
+    const active = st.active;
+    const badge=$('hero-badge'), dot=$('hero-dot'), ping=$('hero-ping'), htxt=$('hero-status');
+    if (active) {
+        if (badge) badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-500/20 text-green-300 border border-green-500/30';
+        if (dot)  dot.className  = 'relative inline-flex rounded-full h-2 w-2 bg-green-400';
+        if (ping) ping.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75';
+        if (htxt) htxt.textContent = 'Active';
+    } else {
+        if (badge) badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-300 border border-red-500/30';
+        if (dot)  dot.className  = 'relative inline-flex rounded-full h-2 w-2 bg-red-400';
+        if (ping) ping.className = 'absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60';
+        if (htxt) htxt.textContent = st.status_text || 'Inactive';
+    }
+    set('hero-version', st.version || '—');
+    set('hero-uptime',  st.uptime  || '—');
+}
 
-        // CPU
-        setGauge('cpu-ring', 'cpu-bar', 'cpu-ring-txt', stats.cpu.percent);
-        set('cpu-pct', stats.cpu.percent.toFixed(1) + '%');
-        set('cpu-load1', stats.cpu.load1.toFixed(2));
+// ── Sites update ──────────────────────────────────────────────────────────
+function updateSites(enabled, total) {
+    const pct = total > 0 ? Math.round(enabled/total*100) : 0;
+    set('sites-fraction',     enabled+' / '+total);
+    set('sites-enabled-big',  enabled);
+    set('sites-card-enabled', enabled);
+    set('sites-card-disabled',total - enabled);
+    set('sites-card-total',   total);
+    const bar = $('sites-bar'); if (bar) bar.style.width = pct+'%';
+    set('hero-sites', enabled+' ');
+    const heroSites=$('hero-sites');
+    if (heroSites) heroSites.innerHTML = enabled+'<span class="text-slate-500 font-normal text-sm"> / '+total+'</span>';
+}
 
-        // Memory
-        setGauge('ram-ring', 'ram-bar', 'ram-ring-txt', stats.memory.percent);
-        set('ram-pct', stats.memory.percent.toFixed(1) + '%');
-        set('ram-used',
-            (stats.memory.used_mb >= 1024 ? (stats.memory.used_mb/1024).toFixed(1)+' GB' : stats.memory.used_mb+' MB') +
-            ' / ' +
-            (stats.memory.total_mb >= 1024 ? (stats.memory.total_mb/1024).toFixed(1)+' GB' : stats.memory.total_mb+' MB')
-        );
+// ── Terminal ──────────────────────────────────────────────────────────────
+function updateTerminal(detail, nodeLabel) {
+    const terminal=$('status-terminal'), body=$('terminal-body'), title=$('terminal-title');
+    if (!terminal) return;
+    if (detail) {
+        terminal.classList.remove('hidden');
+        if (body)  body.textContent  = detail;
+        if (title) title.textContent = nodeLabel ? `systemctl status nginx — ${nodeLabel}` : 'systemctl status nginx';
+    } else {
+        terminal.classList.add('hidden');
+    }
+}
 
-        // Disk
-        if (stats.disk) {
-            setGauge('disk-ring', 'disk-bar', 'disk-ring-txt', stats.disk.percent);
-            set('disk-pct', stats.disk.percent.toFixed(1) + '%');
-            set('disk-used', stats.disk.used_gb + ' GB / ' + stats.disk.total_gb + ' GB');
+// ── Quick actions (admin) ─────────────────────────────────────────────────
+function updateQuickActions(nodeId, node) {
+    const el = $('quick-actions'); if (!el || !IS_ADMIN) return;
+    if (nodeId === 'local') {
+        el.innerHTML = `
+            <form method="post" action="/nginx/reload">
+                <button type="submit" class="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-nginx text-white text-sm font-medium hover:bg-nginx-dark transition-colors shadow-sm">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Reload Nginx
+                </button>
+            </form>
+            <a href="/configs/new" class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                New Config
+            </a>
+            <a href="/ssl" class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                SSL Certificates
+            </a>
+            <a href="/logs" class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                View Logs
+            </a>`;
+    } else {
+        const name = node ? esc(node.name) : 'Remote Node';
+        el.innerHTML = `
+            <form method="post" action="/nodes/${nodeId}/reload">
+                <button type="submit" class="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors shadow-sm">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Reload on ${name}
+                </button>
+            </form>
+            <a href="/nodes/${nodeId}" class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-blue-200 text-blue-700 text-sm font-medium hover:bg-blue-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
+                Manage ${name}
+            </a>
+            <a href="/nodes/${nodeId}/edit" class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                Edit Node Config
+            </a>
+            <a href="/nodes" class="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg>
+                All Nodes
+            </a>`;
+    }
+}
+
+// ── Node selector buttons ─────────────────────────────────────────────────
+function updateSelButtons(activeId) {
+    const btnLocal = $('nsel-local');
+    if (btnLocal) btnLocal.className = activeId==='local' ? SEL_LOCAL : SEL_OFF;
+    NODES.forEach(n => {
+        const btn = $('nsel-'+n.id);
+        if (btn) btn.className = activeId===n.id ? SEL_REMOTE : SEL_OFF;
+    });
+    const lbl = $('node-label');
+    if (lbl) {
+        const nd = NODES.find(n=>n.id===activeId);
+        if (nd) { lbl.textContent='Viewing: '+nd.name; lbl.classList.remove('hidden'); }
+        else    { lbl.classList.add('hidden'); }
+    }
+    // Sites manage link + tag
+    const manageLink = $('sites-manage-link');
+    const tag = $('sites-node-tag');
+    if (manageLink) manageLink.href = activeId==='local' ? '/configs' : `/nodes/${activeId}`;
+    if (tag) {
+        if (activeId !== 'local') {
+            const nd=NODES.find(n=>n.id===activeId);
+            tag.textContent = nd ? nd.name : 'remote';
+            tag.classList.remove('hidden');
+        } else { tag.classList.add('hidden'); }
+    }
+    // Metrics label
+    const ml = $('metrics-label');
+    if (ml) {
+        if (activeId !== 'local') {
+            const nd=NODES.find(n=>n.id===activeId);
+            ml.textContent = (nd ? nd.name : 'Remote') + ' Metrics';
+        } else {
+            ml.textContent = 'System Metrics';
         }
+    }
+}
 
-        // Network bandwidth
-        const now = Date.now();
-        if (_prevNet !== null && _prevNetTs !== null) {
-            const dt = (now - _prevNetTs) / 1000;
-            if (dt > 0) {
-                const rx = fmtRate((stats.network.rx_bytes - _prevNet.rx) / dt);
-                const tx = fmtRate((stats.network.tx_bytes - _prevNet.tx) / dt);
-                set('net-rx', rx);
-                set('net-tx', tx);
-                set('net-rx-rate', rx);
+// ── Metrics error banner ──────────────────────────────────────────────────
+function showMetricsError(msg) {
+    const err = $('metrics-error');
+    if (!err) return;
+    $('metrics-error-msg').textContent = msg || 'Connection failed';
+    const lbl = $('metrics-error-label');
+    if (lbl) lbl.textContent = (_node === 'local' ? 'Local metrics error — ' : 'Remote metrics unavailable — ');
+    const dbg = $('metrics-debug-link');
+    if (dbg) dbg.href = (_node === 'local') ? '/api/debug/stats' : `/api/nodes/${_node}/stats/debug`;
+    err.classList.remove('hidden');
+}
+function hideMetricsError() {
+    const err = $('metrics-error');
+    if (err) err.classList.add('hidden');
+}
+function retryStats() {
+    hideMetricsError();
+    if (_node === 'local') {
+        refreshLocal();
+    } else {
+        const ml = $('metrics-loading'); if (ml) ml.classList.remove('hidden');
+        loadRemoteData(_node);
+    }
+}
+
+// ── Shared metrics applier ────────────────────────────────────────────────
+function applyStats(stats) {
+    if (!stats || stats.error) {
+        showMetricsError(stats?.error || 'No data returned from node');
+        return;
+    }
+    hideMetricsError();
+    if (stats.cpu) {
+        setGauge('cpu-ring','cpu-bar','cpu-ring-txt', stats.cpu.percent);
+        set('cpu-pct',   stats.cpu.percent.toFixed(1)+'%');
+        set('cpu-load1', stats.cpu.load1.toFixed(2));
+    }
+    if (stats.memory) {
+        setGauge('ram-ring','ram-bar','ram-ring-txt', stats.memory.percent);
+        set('ram-pct', stats.memory.percent.toFixed(1)+'%');
+        const um=stats.memory.used_mb, tm=stats.memory.total_mb;
+        set('ram-used',
+            (um>=1024?(um/1024).toFixed(1)+' GB':um+' MB')+
+            ' / '+(tm>=1024?(tm/1024).toFixed(1)+' GB':tm+' MB'));
+    }
+    if (stats.disk) {
+        setGauge('disk-ring','disk-bar','disk-ring-txt', stats.disk.percent);
+        set('disk-pct',  stats.disk.percent.toFixed(1)+'%');
+        set('disk-used', stats.disk.used_gb+' GB / '+stats.disk.total_gb+' GB');
+    }
+    if (stats.network) {
+        const now3=Date.now();
+        if (_prevNet!==null && _prevNetTs!==null) {
+            const dt=(now3-_prevNetTs)/1000;
+            if (dt>0) {
+                const rx=fmtRate((stats.network.rx_bytes-_prevNet.rx)/dt);
+                const tx=fmtRate((stats.network.tx_bytes-_prevNet.tx)/dt);
+                set('net-rx',rx); set('net-tx',tx); set('net-rx-rate',rx);
             }
         }
-        set('net-rx-total', fmtBytes(stats.network.rx_bytes));
-        set('net-tx-total', fmtBytes(stats.network.tx_bytes));
-        _prevNet = { rx: stats.network.rx_bytes, tx: stats.network.tx_bytes };
-        _prevNetTs = now;
-
-        // Nginx status hero
-        const badge = document.getElementById('hero-badge');
-        const dot   = document.getElementById('hero-dot');
-        const ping  = document.getElementById('hero-ping');
-        const txt   = document.getElementById('hero-status');
-        if (nginxSt.active) {
-            if (badge) badge.className = badge.className.replace(/bg-red[^\s]*/g,'').replace(/text-red[^\s]*/g,'').replace(/border-red[^\s]*/g,'')
-                + ' bg-green-500/20 text-green-300 border-green-500/30';
-            if (dot)  dot.className  = 'relative inline-flex rounded-full h-2 w-2 bg-green-400';
-            if (ping) ping.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75';
-            if (txt)  txt.textContent = 'Active';
-        } else {
-            if (badge) badge.className = badge.className.replace(/bg-green[^\s]*/g,'').replace(/text-green[^\s]*/g,'').replace(/border-green[^\s]*/g,'')
-                + ' bg-red-500/20 text-red-300 border-red-500/30';
-            if (dot)  dot.className  = 'relative inline-flex rounded-full h-2 w-2 bg-red-400';
-            if (ping) ping.className = 'absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60';
-            if (txt)  txt.textContent = 'Inactive';
-        }
-
-        // Last refresh time
-        const now2 = new Date();
-        const p = n => String(n).padStart(2,'0');
-        set('last-refresh', p(now2.getHours()) + ':' + p(now2.getMinutes()) + ':' + p(now2.getSeconds()));
-
-    } catch (e) {
-        console.warn('Dashboard refresh error:', e);
+        set('net-rx-total',fmtBytes(stats.network.rx_bytes));
+        set('net-tx-total',fmtBytes(stats.network.tx_bytes));
+        _prevNet={rx:stats.network.rx_bytes,tx:stats.network.tx_bytes}; _prevNetTs=now3;
     }
 }
 
-refresh();
-setInterval(refresh, 5000);
+function selectNode(id) {
+    _node = id;
+    _prevNet = null; _prevNetTs = null;
+    // Keep cookie in sync so SSL/Logs/Backup/ProxyManager pages see the same node
+    document.cookie = 'active_node=' + encodeURIComponent(id) + '; path=/; max-age=604800; SameSite=Lax';
+    updateSelButtons(id);
+    if (id === 'local') {
+        hideMetricsError();
+        updateHero(LOCAL_SNAP);
+        updateSites(LOCAL_SITES.enabled, LOCAL_SITES.total);
+        updateTerminal(LOCAL_SNAP.status_detail, null);
+        updateQuickActions('local', null);
+        stopRemoteTimer();
+        set('hero-title', 'Nginx Web Server');
+        startLocalRefresh();
+    } else {
+        const nd = NODES.find(n=>n.id===id);
+        set('hero-title', nd ? nd.name : 'Remote Node');
+        stopLocalRefresh();
+        // Show loading indicator for metrics
+        const ml=$('metrics-loading'); if(ml) ml.classList.remove('hidden');
+        loadRemoteData(id);
+    }
+}
+
+// ── Remote data loader (status + sites + metrics) ─────────────────────────
+let _remoteTimer = null;
+
+function stopRemoteTimer() { if (_remoteTimer) { clearTimeout(_remoteTimer); _remoteTimer=null; } }
+
+async function loadRemoteData(id) {
+    stopRemoteTimer();
+    const now2=new Date(), p=n=>String(n).padStart(2,'0');
+    try {
+        const [st, sitesData, statsData] = await Promise.all([
+            fetch(`/api/nodes/${id}/status`).then(r=>r.json()),
+            fetch(`/api/nodes/${id}/sites`).then(r=>r.json()),
+            fetch(`/api/nodes/${id}/stats`).then(r=>r.json()),
+        ]);
+        if (_node !== id) return;
+        const ml=$('metrics-loading'); if(ml) ml.classList.add('hidden');
+        if (st.error) {
+            updateHeroOffline(st.error);
+        } else {
+            updateHero(st);
+            updateTerminal(st.status_detail||'', NODES.find(n=>n.id===id)?.name||id);
+        }
+        const sites = sitesData.sites||[];
+        updateSites(sites.filter(s=>s.enabled).length, sites.length);
+        applyStats(statsData);
+        updateQuickActions(id, NODES.find(n=>n.id===id)||null);
+        set('last-refresh', p(now2.getHours())+':'+p(now2.getMinutes())+':'+p(now2.getSeconds()));
+    } catch (e) {
+        if (_node !== id) return;
+        const ml=$('metrics-loading'); if(ml) ml.classList.add('hidden');
+        updateHeroOffline(e.message);
+        showMetricsError(e.message || 'Failed to reach node');
+    }
+    if (_node === id) {
+        _remoteTimer = setTimeout(() => loadRemoteData(id), 30000);
+    }
+}
+
+function updateHeroOffline(msg) {
+    const badge=$('hero-badge'), dot=$('hero-dot'), ping=$('hero-ping'), htxt=$('hero-status');
+    if (badge) badge.className='inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/20 text-red-300 border border-red-500/30';
+    if (dot)  dot.className='relative inline-flex rounded-full h-2 w-2 bg-red-400';
+    if (ping) ping.className='absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60';
+    if (htxt) htxt.textContent='Unreachable';
+    set('hero-version', msg ? msg.substring(0,60) : 'Connection failed');
+    updateTerminal('', null);
+}
+
+// ── Local auto-refresh (nginx status + system metrics) ────────────────────
+let _localTimer = null;
+function stopLocalRefresh()  { if (_localTimer) { clearInterval(_localTimer); _localTimer=null; } }
+function startLocalRefresh() {
+    stopLocalRefresh();
+    refreshLocal();
+    _localTimer = setInterval(refreshLocal, 5000);
+}
+
+async function refreshLocal() {
+    if (_node !== 'local') return;
+    const now2=new Date(), p=n=>String(n).padStart(2,'0');
+    try {
+        const [stats, nginxSt] = await Promise.all([
+            fetch('/api/system/stats').then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status + ' from /api/system/stats');
+                return r.json();
+            }),
+            fetch('/api/nginx/status').then(r=>r.json()),
+        ]);
+        applyStats(stats);
+        updateHero(nginxSt);
+        set('last-refresh', p(now2.getHours())+':'+p(now2.getMinutes())+':'+p(now2.getSeconds()));
+    } catch(e) {
+        console.warn('Dashboard refresh error:', e);
+        showMetricsError(e.message || 'Failed to load system stats');
+    }
+}
+
+// ── Remote node ping → status dots ───────────────────────────────────────
+function pingNode(id) {
+    fetch(`/api/nodes/${id}/ping`)
+        .then(r=>r.json())
+        .then(d=>{
+            const dot=$('ndot-'+id);
+            if (dot) dot.className='w-1.5 h-1.5 rounded-full flex-shrink-0 '+(d.ok?'bg-green-500':'bg-red-400');
+        }).catch(()=>{});
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+updateSelButtons(_node);
+if (_node !== 'local' && NODES.some(n => n.id === _node)) {
+    const nd = NODES.find(n => n.id === _node);
+    set('hero-title', nd ? nd.name : 'Remote Node');
+    const ml = $('metrics-loading'); if (ml) ml.classList.remove('hidden');
+    loadRemoteData(_node);
+} else {
+    if (_node !== 'local') _node = 'local'; // cookie had a stale id
+    startLocalRefresh();
+}
+NODES.forEach(n => pingNode(n.id));
 </script>
 {% endblock %}

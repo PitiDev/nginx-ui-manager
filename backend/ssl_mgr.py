@@ -7,12 +7,16 @@ SSL_DIR = Path(os.getenv("SSL_DIR", "/ssl"))
 
 
 def _safe_path(name: str) -> Optional[Path]:
-    try:
-        p = (SSL_DIR / name).resolve()
-        p.relative_to(SSL_DIR.resolve())
-        return p
-    except (ValueError, OSError):
+    # Don't resolve() the joined path — if `name` were ever a symlink pointing
+    # outside SSL_DIR, resolving would follow it before the containment check.
+    # Traversal is blocked by rejecting any path separator in `name` instead.
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
         return None
+    try:
+        base = SSL_DIR.resolve()
+    except OSError:
+        return None
+    return base / name
 
 
 def _cert_info(path: Path) -> Optional[dict]:

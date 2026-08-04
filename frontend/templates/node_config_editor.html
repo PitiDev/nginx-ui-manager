@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} — {{ node.name }} — Nginx UI{% endblock %}
+{% block page_title %}{{ node.name }}: {{ name }}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.css">
+<style>
+    .CodeMirror {
+        height: calc(100vh - 360px);
+        min-height: 420px;
+        font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+        font-size: 13.5px;
+        line-height: 1.65;
+        border-radius: 0 0 0.75rem 0.75rem;
+    }
+    .cm-toolbar {
+        background: #282a36;
+        border-bottom: 1px solid #44475a;
+    }
+    .CodeMirror-gutters { border-right: 1px solid #44475a; background: #21222c; }
+    .CodeMirror-linenumber { color: #6272a4; }
+    .CodeMirror-activeline-background { background: #313344 !important; }
+    .CodeMirror-selected { background: #44475a !important; }
+    .CodeMirror-cursor { border-left-color: #f8f8f2; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<div class="flex items-center gap-2 text-sm text-gray-500 mb-5">
+    <a href="/nodes" class="hover:text-gray-700 transition-colors">Multi-Node</a>
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+    </svg>
+    <a href="/nodes/{{ node.id }}" class="hover:text-gray-700 transition-colors">{{ node.name }}</a>
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+    </svg>
+    <span class="font-mono text-gray-700">{{ name }}</span>
+</div>
+
+{% if error %}
+<div class="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 whitespace-pre-wrap">{{ error }}</div>
+{% endif %}
+
+{% if output %}
+<div class="mb-4 px-4 py-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-700 whitespace-pre-wrap">{{ output }}</div>
+{% endif %}
+
+<form id="editor-form" method="post" action="/nodes/{{ node.id }}/configs/{{ name }}/save">
+    <div class="rounded-xl overflow-hidden border border-gray-700 shadow-lg mb-4">
+        <div class="cm-toolbar flex items-center justify-between px-4 py-2 gap-4">
+            <div class="flex items-center gap-3">
+                <span class="w-3 h-3 rounded-full bg-red-500 opacity-80"></span>
+                <span class="w-3 h-3 rounded-full bg-yellow-400 opacity-80"></span>
+                <span class="w-3 h-3 rounded-full bg-green-500 opacity-80"></span>
+                <span class="text-xs font-mono text-gray-400 ml-2">{% if enabled %}{{ node.sites_enabled }}{% else %}{{ node.sites_available }} (disabled){% endif %}/{{ name }}</span>
+                <span class="text-xs text-gray-600">·</span>
+                <span id="editor-lines" class="text-xs text-gray-500 font-mono">– lines</span>
+            </div>
+            <span class="text-xs text-gray-500">Remote: {{ node.host }}</span>
+        </div>
+
+        {# Hidden textarea — CodeMirror syncs to this before submit #}
+        <textarea name="content" id="editor-textarea" class="hidden">{{ content }}</textarea>
+    </div>
+
+    <div class="flex items-center gap-3">
+        {% if current_user and current_user.role == 'admin' %}
+        <button type="submit"
+                class="inline-flex items-center gap-2 px-5 py-2.5 bg-nginx text-white text-sm font-medium rounded-xl hover:bg-nginx-dark transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+            </svg>
+            Save &amp; Validate
+        </button>
+        <a href="/nodes/{{ node.id }}"
+           class="text-sm text-gray-400 hover:text-gray-600 transition-colors">Cancel</a>
+        <span class="ml-auto text-xs text-gray-400 hidden sm:block">Ctrl+S to save · nginx -t validates before saving</span>
+        {% else %}
+        <p class="text-xs text-gray-400">Read-only — admin access required to save.</p>
+        {% endif %}
+    </div>
+</form>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/nginx/nginx.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/brace-fold.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+<script>
+const textarea = document.getElementById('editor-textarea');
+const lineCounter = document.getElementById('editor-lines');
+
+const cm = CodeMirror(function(el) {
+    textarea.parentNode.insertBefore(el, textarea.nextSibling);
+}, {
+    value: textarea.value,
+    mode: 'nginx',
+    theme: 'dracula',
+    lineNumbers: true,
+    styleActiveLine: true,
+    matchBrackets: true,
+    autoCloseBrackets: true,
+    foldGutter: true,
+    gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+    tabSize: 4,
+    indentUnit: 4,
+    indentWithTabs: false,
+    lineWrapping: false,
+    readOnly: {{ 'false' if (current_user and current_user.role == 'admin') else 'true' }},
+    extraKeys: {
+        'Tab': (cm) => cm.execCommand('indentMore'),
+        'Shift-Tab': (cm) => cm.execCommand('indentLess'),
+        'Ctrl-/': (cm) => cm.execCommand('toggleComment'),
+        'Cmd-/': (cm) => cm.execCommand('toggleComment'),
+        'Ctrl-S': () => document.getElementById('editor-form').requestSubmit(),
+        'Cmd-S': () => document.getElementById('editor-form').requestSubmit(),
+    },
+});
+
+function updateMeta() {
+    lineCounter.textContent = cm.lineCount() + ' lines';
+}
+updateMeta();
+cm.on('change', updateMeta);
+
+document.getElementById('editor-form').addEventListener('submit', () => {
+    textarea.value = cm.getValue();
+});
+
+cm.focus();
+</script>
+{% endblock %}
