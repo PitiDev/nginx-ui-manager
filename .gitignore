@@ -1,4 +1,16 @@
 .env
-.deploy.sh
 push_dockerhub.sh
 CLAUDE.md
+
+# Secrets / internal infra — never commit
+.claude/settings.local.json
+howtodeploy.txt
+deploy.sh
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
