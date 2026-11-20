@@ -15,6 +15,13 @@
     </div>
     {% if current_user and current_user.role == 'admin' %}
     <div class="flex items-center gap-2">
+        <a href="/nodes/{{ node.id }}/configs/new"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-nginx text-white text-sm font-medium rounded-lg hover:bg-nginx-dark transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            New Config
+        </a>
         <a href="/nodes/{{ node.id }}/builder"
            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-violet-100 text-violet-700 rounded-lg hover:bg-violet-200 transition-colors">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

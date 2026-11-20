@@ -580,6 +580,38 @@ def _parse_proxy_text(name: str, content: str, enabled: bool) -> dict:
     }
 
 
+_GLOBALS_MARK = "=====NGINXUI-FILE:"
+
+
+def get_remote_nginx_globals(node: dict) -> dict:
+    """Read nginx.conf, conf.d/*.conf, snippets/*.conf and the Let's Encrypt
+    TLS options from a remote node, for the security hardening audit.
+    The command is fixed — nothing user-controlled reaches the shell."""
+    if not _AVAILABLE:
+        return {}
+    cmd = (
+        "for f in /etc/nginx/nginx.conf /etc/nginx/conf.d/*.conf /etc/nginx/snippets/*.conf "
+        "/etc/letsencrypt/options-ssl-nginx.conf; do "
+        f"[ -f \"$f\" ] && {{ echo \"{_GLOBALS_MARK}$f\"; cat \"$f\"; echo; }}; "
+        "done"
+    )
+    try:
+        ssh = _connect(node)
+        _, out = _sudo(ssh, cmd, node.get("sudo_password", ""))
+        ssh.close()
+    except Exception:
+        return {}
+    files: dict = {}
+    current = None
+    for line in out.splitlines():
+        if line.startswith(_GLOBALS_MARK):
+            current = line[len(_GLOBALS_MARK):].strip()
+            files[current] = ""
+        elif current:
+            files[current] += line + "\n"
+    return files
+
+
 def list_remote_proxies(node: dict) -> list:
     """List and parse nginx proxy configs from a remote node's sites-enabled
     (live) and sites-available (archived) directories."""

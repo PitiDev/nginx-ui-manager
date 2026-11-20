@@ -14,3 +14,6 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# GeoIP database (downloaded by scripts/fetch_geoip.py)
+geoip/

@@ -1,0 +1,1486 @@
+{% extends "base.html" %}
+{% block title %}Security Monitor — Nginx UI{% endblock %}
+{% block page_title %}Cyber Security Monitor{% endblock %}
+
+{% block extra_head %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+    .sm-panel { background: #0d1117; border: 1px solid #21262d; border-radius: 1rem; overflow: hidden; }
+    .sm-head  { border-bottom: 1px solid #21262d; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .sm-title { color: #c9d1d9; font-size: 13px; font-weight: 700; letter-spacing: .02em; }
+    .sm-sub   { color: #6e7681; font-size: 11px; }
+    .sm-muted { color: #6e7681; }
+    .sm-text  { color: #c9d1d9; }
+    .sm-kpi-val { font-size: 26px; font-weight: 800; font-family: ui-monospace, monospace; line-height: 1.1; }
+    .sm-kpi-lbl { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+
+    .sev { display:inline-flex; align-items:center; padding:1px 7px; border-radius:999px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; border:1px solid; white-space:nowrap; }
+    .sev-critical { color:#fca5a5; background:rgba(248,113,113,.12); border-color:rgba(248,113,113,.45); }
+    .sev-high     { color:#fdba74; background:rgba(251,146,60,.12);  border-color:rgba(251,146,60,.45); }
+    .sev-medium   { color:#fde047; background:rgba(250,204,21,.10);  border-color:rgba(250,204,21,.40); }
+    .sev-low      { color:#93c5fd; background:rgba(96,165,250,.10);  border-color:rgba(96,165,250,.40); }
+    .sev-info     { color:#8b949e; background:rgba(139,148,158,.10); border-color:rgba(139,148,158,.35); }
+    .chip { display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:6px; font-size:10px; font-weight:600; background:#161b22; border:1px solid #30363d; color:#8b949e; white-space:nowrap; }
+
+    .sm-table { width:100%; font-size:12px; border-collapse:collapse; }
+    .sm-table th { text-align:left; color:#6e7681; font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:.06em; padding:8px 12px; border-bottom:1px solid #21262d; position:sticky; top:0; background:#0d1117; z-index:1; }
+    .sm-table td { padding:7px 12px; border-bottom:1px solid #161b22; vertical-align:top; }
+    .sm-table tr:hover td { background:#11161d; }
+
+    .sm-scroll::-webkit-scrollbar { width:7px; height:7px; }
+    .sm-scroll::-webkit-scrollbar-track { background:#0d1117; }
+    .sm-scroll::-webkit-scrollbar-thumb { background:#30363d; border-radius:4px; }
+
+    .sm-input { background:#0d1117; border:1px solid #30363d; color:#c9d1d9; border-radius:8px; padding:5px 10px; font-size:12px; }
+    .sm-input:focus { outline:none; border-color:#58a6ff; }
+    .sm-btn { display:inline-flex; align-items:center; gap:6px; padding:5px 11px; border-radius:8px; font-size:12px; font-weight:600; background:#161b22; border:1px solid #30363d; color:#c9d1d9; transition:all .15s; cursor:pointer; }
+    .sm-btn:hover { background:#1c2430; border-color:#484f58; }
+    .sm-btn-danger { background:rgba(248,113,113,.12); border-color:rgba(248,113,113,.5); color:#fca5a5; }
+    .sm-btn-danger:hover { background:rgba(248,113,113,.22); }
+
+    .sm-node-tab { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:10px; font-size:12px; font-weight:600; background:#161b22; border:1px solid #30363d; color:#8b949e; transition:all .15s; cursor:pointer; }
+    .sm-node-tab:hover { background:#1c2430; color:#c9d1d9; }
+    .sm-node-tab.active { background:rgba(248,113,113,.12); border-color:#f87171; color:#fca5a5; }
+
+    .bar-wrap { background:#161b22; border-radius:6px; overflow:hidden; }
+    .bar-fill { height:100%; transition: width .6s cubic-bezier(.16,1,.3,1); }
+
+    @keyframes sm-pulse { 0%,100% { opacity:1; box-shadow:0 0 0 0 rgba(248,113,113,.55); } 50% { opacity:.55; box-shadow:0 0 0 6px rgba(248,113,113,0); } }
+    .sm-live-dot { animation: sm-pulse 1.6s ease-in-out infinite; }
+    @keyframes sm-row-in { from { opacity:0; transform:translateY(-4px); background:rgba(248,113,113,.14); } to { opacity:1; transform:none; } }
+    .sm-row-in td { animation: sm-row-in .6s ease-out; }
+
+    .sm-level { position:relative; overflow:hidden; }
+    .sm-level::after { content:''; position:absolute; inset:0; background: radial-gradient(circle at 85% 20%, var(--lvl-glow) 0%, transparent 60%); pointer-events:none; }
+
+    details.sm-check > summary { list-style:none; cursor:pointer; }
+    details.sm-check > summary::-webkit-details-marker { display:none; }
+    details.sm-check[open] .sm-caret { transform: rotate(90deg); }
+    .sm-caret { transition: transform .15s; }
+    .sm-pre { background:#010409; border:1px solid #21262d; border-radius:8px; padding:10px 12px; font-size:11px; color:#a5d6ff; white-space:pre-wrap; word-break:break-all; font-family:ui-monospace,monospace; }
+
+    /* ── Display / wall-monitor mode ─────────────────────────────────────── */
+    #sm-root { background:#010409; margin:-24px; min-height:calc(100vh - 57px); }
+    #sm-scroller { padding:24px; }
+    /* Chrome forces overflow:hidden on the :fullscreen element itself, so the
+       scrolling happens on the inner wrapper. One selector per rule: an
+       unknown vendor prefix would invalidate a grouped selector list. */
+    #sm-root:fullscreen { margin:0; width:100vw; height:100vh; }
+    #sm-root:-webkit-full-screen { margin:0; width:100vw; height:100vh; }
+    #sm-root:fullscreen #sm-scroller { height:100%; overflow-y:auto; }
+    #sm-root:-webkit-full-screen #sm-scroller { height:100%; overflow-y:auto; }
+    html.sm-tv, html.sm-tv body { background:#010409; }
+    html.sm-tv aside, html.sm-tv header { display:none !important; }
+    html.sm-tv .ml-60 { margin-left:0 !important; }
+    html.sm-tv main { padding:0 !important; }
+    html.sm-tv #sm-root { margin:0; min-height:100vh; }
+    .sm-display-only { display:none !important; }
+    .sm-display .sm-display-only { display:flex !important; }
+    .sm-display .sm-hide-display { display:none !important; }
+    .sm-display.sm-idle, .sm-display.sm-idle * { cursor:none !important; }
+    .sm-display .sm-kpi-val { font-size:clamp(34px, 2.7vw, 60px); }
+    .sm-display #sm-level { font-size:clamp(30px, 2.3vw, 50px); }
+    .sm-display .sm-kpi-lbl { font-size:12px; }
+
+    .sm-kpi { position:relative; display:flex; flex-direction:column; min-height:150px; }
+    .sm-kpi::before { content:''; position:absolute; inset:0 0 auto 0; height:2px; background:linear-gradient(90deg, transparent, var(--c), transparent); opacity:.8; }
+    .sm-kpi-val { font-size:34px; font-weight:800; font-family:ui-monospace, SFMono-Regular, monospace; line-height:1.05; color:var(--c); text-shadow:0 0 24px color-mix(in srgb, var(--c) 35%, transparent); font-variant-numeric:tabular-nums; }
+    .sm-spark { width:100%; height:46px; margin-top:auto; display:block; }
+    .sm-delta { font-size:11px; font-weight:700; font-family:ui-monospace,monospace; }
+    .sm-kpi-ico { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:color-mix(in srgb, var(--c) 14%, transparent); color:var(--c); }
+    #sm-needle { transform-origin:100px 100px; transition:transform 1.1s cubic-bezier(.34,1.56,.64,1); }
+    .sm-tl-area { transition:d .6s ease; }
+
+    /* ── Global threat map ─────────────────────────────────────────────── */
+    .sm-map { position:relative; height:500px; overflow:hidden;
+        background:
+            radial-gradient(ellipse 70% 60% at 50% 48%, rgba(8,145,178,.16), transparent 70%),
+            radial-gradient(circle at 12% 88%, rgba(248,113,113,.08), transparent 40%),
+            #02060c; }
+    .sm-map canvas, .sm-map svg { position:absolute; inset:0; width:100%; height:100%; }
+    .sm-map::before { content:''; position:absolute; inset:0; pointer-events:none; z-index:2;
+        background: repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px); }
+    .sm-map::after { content:''; position:absolute; left:0; right:0; height:35%; top:-35%; pointer-events:none; z-index:2;
+        background: linear-gradient(180deg, transparent, rgba(34,211,238,.07) 60%, rgba(34,211,238,.16) 98%, transparent);
+        animation: sm-sweep 6s linear infinite; }
+    @keyframes sm-sweep { to { top:100%; } }
+    .sm-display .sm-map { height:62vh; min-height:460px; }
+    /* ── Laos province map ─────────────────────────────────────────────── */
+    .lao { font-family:'Noto Sans Lao','Phetsarath OT','Saysettha OT','Lao UI','Leelawadee UI',sans-serif; }
+    .sm-map.sm-laos { height:660px; }
+    .sm-display .sm-map.sm-laos { height:78vh; min-height:560px; }
+    .lm-metric-btn { padding:5px 11px; font-size:11px; font-weight:700; color:#67e8f9; background:rgba(1,8,16,.82); transition:all .15s; }
+    .lm-metric-btn:hover { background:rgba(34,211,238,.12); }
+    .lm-metric-btn.active { background:rgba(34,211,238,.25); color:#fff; }
+    .lm-row { transition:background .15s; }
+    .lm-row:hover { background:rgba(255,255,255,.04); }
+    .lm-row.sel { background:rgba(34,211,238,.12); box-shadow:inset 3px 0 0 #22d3ee; }
+    .lm-prov:hover { filter:brightness(1.25); }
+
+    /* Map-only full screen: native (:fullscreen) or, when the browser
+       refuses / for ?view=map kiosk, a fixed overlay over the whole window. */
+    .sm-fs-panel.sm-map-fs { border-radius:0; border:0 !important; }
+    .sm-fs-panel.sm-map-fs .sm-map { height:100vh; min-height:0; }
+    .sm-fs-panel.sm-map-kiosk { position:fixed; inset:0; z-index:60; }
+    .sm-mapfs-only { display:none !important; }
+    .sm-fs-panel.sm-map-fs .sm-mapfs-only { display:flex !important; }
+    .sm-fs-panel.sm-map-fs .sm-map-hint { display:none; }
+    .sm-glass { background:rgba(1,8,16,.66); border:1px solid rgba(34,211,238,.22); border-radius:14px; backdrop-filter:blur(8px);
+        box-shadow:0 10px 40px -12px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.03); }
+    .sm-glass-title { font-family:ui-monospace,monospace; font-size:10px; font-weight:800; letter-spacing:.22em; color:#22d3ee; padding:10px 14px 6px; display:flex; align-items:center; gap:8px; }
+    .sm-fs-kpi { min-width:120px; padding:10px 18px; text-align:center; }
+    .sm-fs-kpi b { display:block; font:800 30px/1.05 ui-monospace,monospace; font-variant-numeric:tabular-nums; }
+    .sm-fs-kpi span { font:700 9px ui-monospace,monospace; letter-spacing:.18em; color:#6e7681; }
+    .sm-map { cursor:zoom-in; }
+    .sm-fs-panel.sm-map-fs .sm-map { cursor:default; }
+    .sm-hud { position:absolute; z-index:3; pointer-events:none; font-family:ui-monospace,SFMono-Regular,monospace; }
+    .sm-hud-box { background:rgba(1,4,9,.72); border:1px solid rgba(34,211,238,.28); border-radius:10px; padding:8px 12px; backdrop-filter:blur(4px); }
+    .sm-hud-corner { position:absolute; width:18px; height:18px; border-color:rgba(34,211,238,.6); z-index:3; pointer-events:none; }
+    .sm-map-tip { position:absolute; z-index:5; min-width:230px; max-width:300px; pointer-events:none;
+        background:rgba(1,4,9,.94); border:1px solid rgba(34,211,238,.45); border-radius:10px; padding:10px 12px;
+        box-shadow:0 0 0 1px rgba(34,211,238,.08), 0 12px 40px -10px rgba(34,211,238,.35); }
+    .sm-ping { transform-box:fill-box; transform-origin:center; animation:sm-ping 2.6s ease-out infinite; }
+    @keyframes sm-ping { 0% { transform:scale(.7); opacity:.95; } 100% { transform:scale(3.4); opacity:0; } }
+    .sm-comet { animation:sm-comet var(--dur,3s) linear var(--delay,0s) infinite; }
+    .sm-comet-once { animation-iteration-count:1; animation-delay:0s; }
+    @keyframes sm-comet { from { stroke-dashoffset:22; } to { stroke-dashoffset:-100; } }
+    .sm-impact { transform-box:fill-box; transform-origin:center; animation:sm-impact 1.1s ease-out forwards; }
+    @keyframes sm-impact { from { transform:scale(.4); opacity:1; } to { transform:scale(4.5); opacity:0; } }
+    .sm-pt:hover circle:last-child { stroke:#fff; stroke-width:1.5; }
+    @keyframes sm-tick-in { from { opacity:0; transform:translateX(-8px); background:rgba(248,113,113,.15); } to { opacity:1; transform:none; } }
+    .sm-tick-in { animation:sm-tick-in .5s ease-out; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="sm-root"><div id="sm-scroller">
+<div class="space-y-4" style="color:#c9d1d9">
+
+{# ── Wall-monitor header (full screen / TV mode only) ──────────────────── #}
+<div class="sm-display-only items-center justify-between gap-6 pb-1">
+    <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-2xl flex items-center justify-center" style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.4)">
+            <svg class="w-8 h-8" fill="none" stroke="#f87171" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"/><path stroke-linecap="round" stroke-width="1.8" d="M12 8v4m0 3h.01"/></svg>
+        </div>
+        <div>
+            <div class="text-3xl font-black tracking-tight text-white">Cyber Security Operations</div>
+            <div class="text-sm sm-muted flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-red-400 sm-live-dot"></span><span id="sm-tv-scope">Local node</span></div>
+        </div>
+        <span id="sm-tv-level" class="ml-4 px-4 py-1.5 rounded-xl text-xl font-black uppercase tracking-widest" style="border:2px solid #30363d">—</span>
+    </div>
+    <div class="text-right">
+        <div id="sm-clock" class="font-mono text-5xl font-bold text-white tabular-nums">--:--:--</div>
+        <div id="sm-date" class="text-sm sm-muted"></div>
+    </div>
+</div>
+
+{# ── Node tabs ─────────────────────────────────────────────────────────── #}
+{% if all_nodes %}
+<div class="flex items-center gap-2 flex-wrap">
+    <span class="text-xs font-semibold uppercase tracking-wider mr-1 sm-muted">Scope:</span>
+    <button class="sm-node-tab" data-node="all" onclick="smSelectNode('all')">All Nodes</button>
+    <button class="sm-node-tab" data-node="local" onclick="smSelectNode('local')">Local</button>
+    {% for node in all_nodes %}
+    <button class="sm-node-tab" data-node="{{ node.id }}" onclick="smSelectNode(this.dataset.node)">
+        {{ node.name }} <span class="font-mono opacity-60">{{ node.host }}</span>
+    </button>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# ── Toolbar ───────────────────────────────────────────────────────────── #}
+<div class="flex flex-wrap items-center gap-2">
+    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold" style="background:rgba(248,113,113,.1);color:#fca5a5;border:1px solid rgba(248,113,113,.35)">
+        <span class="w-2 h-2 rounded-full bg-red-400 sm-live-dot" id="sm-live-dot"></span>
+        <span id="sm-live-label">CONNECTING</span>
+    </span>
+    <button class="sm-btn" id="sm-pause" onclick="smTogglePause()">Pause</button>
+    <label class="text-xs sm-muted flex items-center gap-1.5">Analyse last
+        <select id="sm-lines" class="sm-input" onchange="smReconnect()">
+            <option value="2000">2,000</option>
+            <option value="5000" selected>5,000</option>
+            <option value="10000">10,000</option>
+            <option value="20000">20,000</option>
+        </select> log lines
+    </label>
+    <span class="text-xs sm-muted" id="sm-window"></span>
+    <span class="ml-auto text-xs sm-muted" id="sm-updated">—</span>
+    <button class="sm-btn" id="sm-fs-btn" onclick="smToggleFullscreen()" title="Full screen (press F)">
+        <svg class="w-3.5 h-3.5" id="sm-fs-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        <span id="sm-fs-label">Full screen</span>
+    </button>
+    <a class="sm-btn" id="sm-tv-btn" href="/security?tv=1" target="_blank" title="Kiosk layout for a wall monitor: no sidebar, big clock. Combine with the browser's F11 / --kiosk.">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M8 20h8M12 16v4"/></svg>
+        <span id="sm-tv-label">TV mode</span>
+    </a>
+</div>
+
+<div id="sm-unreachable" class="hidden px-4 py-2.5 rounded-xl text-xs font-medium" style="background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.35);color:#fdba74"></div>
+<div id="sm-proxy-hint" class="hidden px-4 py-3 rounded-xl text-xs" style="background:rgba(96,165,250,.07);border:1px solid rgba(96,165,250,.35);color:#bfdbfe"></div>
+<div id="sm-error" class="hidden px-4 py-2.5 rounded-xl text-xs font-medium" style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.35);color:#fca5a5"></div>
+
+{# ── Threat-level gauge + KPI cards ────────────────────────────────────── #}
+<div class="grid grid-cols-1 xl:grid-cols-4 gap-4">
+    <div class="sm-panel sm-level p-5 flex flex-col" id="sm-level-card" style="--lvl-glow: rgba(52,211,153,.18)">
+        <div class="sm-kpi-lbl">Current Threat Level</div>
+        <svg viewBox="0 0 200 118" class="w-full mt-2" style="max-height:170px">
+            <g id="sm-gauge-arcs"></g>
+            <g id="sm-needle" style="transform:rotate(-72deg)">
+                <line x1="100" y1="100" x2="100" y2="34" stroke="#e6edf3" stroke-width="3.5" stroke-linecap="round"/>
+                <circle cx="100" cy="100" r="8" fill="#e6edf3"/><circle cx="100" cy="100" r="3.5" fill="#0d1117"/>
+            </g>
+        </svg>
+        <div class="text-center -mt-1">
+            <div class="text-4xl font-black tracking-widest uppercase" id="sm-level" style="color:#34d399">—</div>
+            <div class="text-xs sm-muted mt-1" id="sm-level-desc">Waiting for data…</div>
+        </div>
+        <div class="mt-auto pt-4 flex items-center justify-between rounded-xl px-3 py-2 cursor-pointer" style="background:#161b22" onclick="document.getElementById('sm-audit-panel').scrollIntoView({behavior:'smooth'})">
+            <span class="sm-kpi-lbl">Hardening</span>
+            <span class="text-right"><span class="font-mono font-black text-xl" id="kpi-grade" style="color:#8b949e">—</span>
+            <span class="block text-[10px] sm-muted" id="kpi-grade-sub">config audit</span></span>
+        </div>
+    </div>
+
+    <div class="xl:col-span-3 grid grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for k, label, color, trend, sub, icon in [
+            ('threats',   'Threat Requests',      '#f87171', 'bad',     '',                              'M13 10V3L4 14h7v7l9-11h-7z'),
+            ('attackers', 'Attacker IPs',         '#fb923c', 'bad',     '',                              'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z'),
+            ('crit',      'Critical + High',      '#f43f5e', 'bad',     'most severe detections',        'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z'),
+            ('blocked',   'Blocked by Nginx',     '#34d399', 'good',    '403 / 429 / 444 responses',     'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636'),
+            ('served',    'Attacks Served ⚠',     '#facc15', 'bad',     'got a 2xx / 3xx answer',        'M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'),
+            ('rpm',       'Traffic (req / min)',  '#38bdf8', 'neutral', 'all requests, last 5 min',      'M3 12h4l2-7 4 14 2-7h6'),
+        ] %}
+        <div class="sm-panel sm-kpi p-4" style="--c:{{ color }}" data-trend="{{ trend }}"{% if k == 'served' %} title="Malicious-looking requests that got a 2xx/3xx answer. Check these first — a 200 on /.env or /.git/config is a real leak. (SPAs that answer every path with index.html can cause false positives.)"{% endif %}>
+            <div class="flex items-center justify-between gap-2">
+                <div class="sm-kpi-lbl">{{ label }}</div>
+                <div class="sm-kpi-ico"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}"/></svg></div>
+            </div>
+            <div class="flex items-end gap-2 mt-2">
+                <div class="sm-kpi-val" id="kpi-{{ k }}">—</div>
+                <div class="sm-delta pb-1" id="delta-{{ k }}" title="last 30 min vs previous 30 min"></div>
+            </div>
+            <div class="text-xs sm-muted mt-0.5 truncate" id="kpi-{{ k }}-sub">{{ sub }}</div>
+            <svg class="sm-spark mt-2" id="spark-{{ k }}" viewBox="0 0 200 46" preserveAspectRatio="none"></svg>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{# ── Fleet status (All Nodes scope) ───────────────────────────────────── #}
+<div id="sm-nodes-panel" class="sm-panel hidden">
+    <div class="sm-head">
+        <div><div class="sm-title">Fleet Status</div><div class="sm-sub" id="sm-nodes-sub">Per-node threat activity · click a node to drill in</div></div>
+        <div class="flex items-center gap-3 text-xs" id="sm-nodes-summary"></div>
+    </div>
+    <div class="p-3 grid gap-3" style="grid-template-columns:repeat(auto-fill,minmax(250px,1fr))" id="sm-nodes"></div>
+</div>
+
+{# ── Global threat map ─────────────────────────────────────────────────── #}
+<div class="grid grid-cols-1 xl:grid-cols-4 gap-4">
+    <div class="sm-panel sm-fs-panel xl:col-span-3 relative" id="sm-map-panel" style="border-color:rgba(34,211,238,.25)">
+        <div class="sm-map" id="sm-map">
+            <canvas></canvas>
+            <svg preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="sm-map-tip hidden"></div>
+        </div>
+        <span class="sm-hud-corner" style="top:8px;left:8px;border-top:2px solid;border-left:2px solid"></span>
+        <span class="sm-hud-corner" style="top:8px;right:8px;border-top:2px solid;border-right:2px solid"></span>
+        <span class="sm-hud-corner" style="bottom:8px;left:8px;border-bottom:2px solid;border-left:2px solid"></span>
+        <span class="sm-hud-corner" style="bottom:8px;right:8px;border-bottom:2px solid;border-right:2px solid"></span>
+
+        <div class="sm-hud" style="top:18px;left:22px">
+            <div class="flex items-center gap-2 text-[11px] font-bold tracking-[.25em]" style="color:#22d3ee">
+                <span class="w-2 h-2 rounded-full sm-live-dot" style="background:#22d3ee"></span>GLOBAL THREAT MAP</div>
+            <div class="text-[10px] mt-1 tracking-wider" style="color:#4b6b7a" id="sm-map-sub">Attack origins → <span id="sm-map-home">home</span></div>
+        </div>
+        <div class="absolute z-10 flex items-start gap-2" style="top:16px;right:18px">
+        <div class="sm-hud flex gap-2" style="position:static">
+            <div class="sm-hud-box text-center"><div class="text-xl font-black" style="color:#f87171" id="sm-map-countries">0</div><div class="text-[9px] tracking-widest" style="color:#6e7681">COUNTRIES</div></div>
+            <div class="sm-hud-box text-center"><div class="text-xl font-black" style="color:#fb923c" id="sm-map-located">0</div><div class="text-[9px] tracking-widest" style="color:#6e7681">LOCATED IPS</div></div>
+            <div class="sm-hud-box text-center"><div class="text-xl font-black" style="color:#22d3ee" id="sm-map-live">0</div><div class="text-[9px] tracking-widest" style="color:#6e7681">HITS · 15 MIN</div></div>
+        </div>
+        <button class="sm-btn" id="sm-map-fs-btn" style="padding:8px 12px;background:rgba(1,8,16,.8);border-color:rgba(34,211,238,.45);color:#67e8f9" onclick="smMapFullscreen()" title="Map full screen (M or double-click map) · Esc to exit">
+            <svg class="w-4 h-4" id="sm-map-fs-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+            <span id="sm-map-fs-label">Full screen map</span>
+        </button>
+        </div>
+        <div class="sm-hud sm-hud-box flex items-center gap-3 text-[10px]" style="bottom:18px;left:22px;color:#8b949e">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:#f87171;box-shadow:0 0 6px #f87171"></span>critical</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:#fb923c"></span>high</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:#facc15"></span>medium</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:#60a5fa"></span>low</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:#22d3ee;box-shadow:0 0 6px #22d3ee"></span>your server</span>
+        </div>
+        <div class="sm-hud text-[10px] text-right" style="bottom:18px;right:22px;color:#4b6b7a">
+            <div id="sm-map-unlocated"></div>
+            <div id="sm-map-attrib"></div>
+        </div>
+        <div class="sm-hud sm-map-hint text-[10px]" style="top:62px;left:22px;color:#3b5866">double-click map or press M for full screen</div>
+
+        {# ── Map-only full screen overlays ── #}
+        <div class="sm-mapfs-only sm-hud items-center gap-4" style="top:64px;left:22px">
+            <div id="sm-fs-clock" class="text-4xl font-bold text-white tabular-nums" style="text-shadow:0 0 18px rgba(34,211,238,.35)">--:--:--</div>
+            <div id="sm-fs-level" class="px-3 py-1 rounded-lg text-sm font-black uppercase tracking-[.2em]" style="border:2px solid #30363d">—</div>
+            <div id="sm-fs-scope" class="text-[11px] tracking-wider" style="color:#4b6b7a"></div>
+        </div>
+        <div class="sm-mapfs-only absolute flex-col gap-3" style="z-index:4;top:84px;right:22px;bottom:96px;width:340px">
+            <div class="sm-glass">
+                <div class="sm-glass-title"><span class="w-1.5 h-1.5 rounded-full" style="background:#f87171"></span>TOP ORIGINS</div>
+                <div class="px-3.5 pb-3 space-y-2" id="sm-fs-countries"></div>
+            </div>
+            <div class="sm-glass flex-1 min-h-0 flex flex-col overflow-hidden">
+                <div class="sm-glass-title"><span class="w-1.5 h-1.5 rounded-full bg-red-400 sm-live-dot"></span>LIVE ATTACKS</div>
+                <div class="px-1.5 pb-2 space-y-0.5 overflow-hidden flex-1" id="sm-fs-ticker"></div>
+            </div>
+        </div>
+        <div class="sm-mapfs-only sm-glass absolute items-stretch divide-x divide-white/5" style="z-index:4;bottom:16px;left:50%;transform:translateX(-50%)">
+            <div class="sm-fs-kpi"><b id="sm-fs-k-threats" style="color:#f87171">0</b><span>THREATS</span></div>
+            <div class="sm-fs-kpi"><b id="sm-fs-k-attackers" style="color:#fb923c">0</b><span>ATTACKER IPS</span></div>
+            <div class="sm-fs-kpi"><b id="sm-fs-k-crit" style="color:#f43f5e">0</b><span>CRITICAL+HIGH</span></div>
+            <div class="sm-fs-kpi"><b id="sm-fs-k-countries" style="color:#22d3ee">0</b><span>COUNTRIES</span></div>
+            <div class="sm-fs-kpi"><b id="sm-fs-k-blocked" style="color:#34d399">0</b><span>BLOCKED</span></div>
+        </div>
+
+        <div id="sm-map-missing" class="hidden absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+            <div class="sm-hud-box text-xs text-center max-w-md" style="color:#fde047;border-color:rgba(250,204,21,.4);pointer-events:auto">
+                <div class="font-bold mb-1">GeoIP database not available — origins can't be placed</div>
+                <div class="sm-muted" id="sm-map-missing-why"></div>
+                <div class="mt-1 sm-text font-mono">python scripts/fetch_geoip.py</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-col gap-4">
+        <div class="sm-panel flex flex-col" style="max-height:290px">
+            <div class="sm-head"><div><div class="sm-title">Top Origin Countries</div><div class="sm-sub">By threat hits in window</div></div></div>
+            <div class="p-3 space-y-2.5 sm-scroll overflow-y-auto" id="sm-countries"><div class="text-xs sm-muted">Waiting for data…</div></div>
+        </div>
+        <div class="sm-panel flex flex-col flex-1 min-h-0">
+            <div class="sm-head"><div><div class="sm-title">Live Attack Feed</div><div class="sm-sub">Newest first</div></div>
+                <span class="w-2 h-2 rounded-full bg-red-400 sm-live-dot"></span></div>
+            <div class="p-2 space-y-1 sm-scroll overflow-y-auto flex-1" style="max-height:330px" id="sm-ticker"></div>
+        </div>
+    </div>
+</div>
+
+{# ── Laos: system users & threats by province ──────────────────────────── #}
+<div class="grid grid-cols-1 xl:grid-cols-4 gap-4">
+    <div class="sm-panel sm-fs-panel xl:col-span-3 relative" id="sm-laos-panel" style="border-color:rgba(34,211,238,.25)">
+        <div class="sm-map sm-laos" id="sm-laos">
+            <svg preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="sm-map-tip hidden"></div>
+        </div>
+        <span class="sm-hud-corner" style="top:8px;left:8px;border-top:2px solid;border-left:2px solid"></span>
+        <span class="sm-hud-corner" style="top:8px;right:8px;border-top:2px solid;border-right:2px solid"></span>
+        <span class="sm-hud-corner" style="bottom:8px;left:8px;border-bottom:2px solid;border-left:2px solid"></span>
+        <span class="sm-hud-corner" style="bottom:8px;right:8px;border-bottom:2px solid;border-right:2px solid"></span>
+
+        <div class="sm-hud" style="top:18px;left:22px">
+            <div class="flex items-center gap-2 text-[11px] font-bold tracking-[.25em]" style="color:#22d3ee">
+                <span class="w-2 h-2 rounded-full sm-live-dot" style="background:#22d3ee"></span>LAO PDR ·
+                <span class="lao tracking-normal text-[13px]">ສປປ ລາວ</span></div>
+            <div class="text-[10px] mt-1 tracking-wider" style="color:#4b6b7a">System users &amp; threats by province</div>
+        </div>
+        <div class="sm-hud sm-map-hint text-[10px]" style="top:62px;left:22px;color:#3b5866">double-click map or press L for full screen</div>
+
+        <div class="absolute z-10 flex items-start gap-2" style="top:16px;right:18px">
+            <div class="sm-hud flex gap-2" style="position:static">
+                <div class="sm-hud-box text-center"><div class="text-xl font-black" style="color:#22d3ee" id="sm-lao-users">0</div><div class="text-[9px] tracking-widest" style="color:#6e7681">LAO USERS</div></div>
+                <div class="sm-hud-box text-center"><div class="text-xl font-black" style="color:#60a5fa"><span id="sm-lao-prov">0</span><span class="text-xs" style="color:#4b6b7a">/18</span></div><div class="text-[9px] tracking-widest" style="color:#6e7681">PROVINCES</div></div>
+                <div class="sm-hud-box text-center"><div class="text-xl font-black" style="color:#34d399" id="sm-lao-share">0%</div><div class="text-[9px] tracking-widest" style="color:#6e7681">OF TRAFFIC</div></div>
+            </div>
+            <div class="flex flex-col gap-2 items-end">
+                <button class="sm-btn" id="sm-laos-fs-btn" style="padding:8px 12px;background:rgba(1,8,16,.8);border-color:rgba(34,211,238,.45);color:#67e8f9" onclick="smPanelFullscreen('laos')" title="Laos map full screen (L or double-click map) · Esc to exit">
+                    <svg class="w-4 h-4" id="sm-laos-fs-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+                    <span id="sm-laos-fs-label">Full screen Laos</span>
+                </button>
+                <div class="flex rounded-lg overflow-hidden" style="border:1px solid rgba(34,211,238,.35)" id="sm-lao-metric">
+                    <button class="lm-metric-btn active" data-m="users" onclick="smLaosMetric(this.dataset.m)">Users</button>
+                    <button class="lm-metric-btn" data-m="requests" onclick="smLaosMetric(this.dataset.m)">Requests</button>
+                    <button class="lm-metric-btn" data-m="threats" onclick="smLaosMetric(this.dataset.m)">Threats</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sm-hud sm-hud-box text-[10px]" style="bottom:18px;left:22px;color:#8b949e">
+            <div class="flex items-center justify-between gap-6 mb-1"><span id="sm-lao-legend-label" class="font-bold tracking-wider" style="color:#67e8f9">USERS</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:#67e8f9"></span>city</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" style="background:#f87171"></span>attacks from city</span></div>
+            <div class="flex items-center gap-2"><span>0</span><div id="sm-lao-legend-bar" style="width:170px;height:7px;border-radius:4px"></div><span id="sm-lao-legend-max">0</span></div>
+        </div>
+        <div class="sm-hud text-[10px] text-right" style="bottom:18px;right:22px;color:#4b6b7a;max-width:30%">
+            <div>Location = IP geolocation. Most Lao carriers route via Vientiane, so Vientiane Capital is over-represented.</div>
+            <div id="sm-lao-attrib"></div>
+        </div>
+
+        {# ── Laos full-screen overlays ── #}
+        <div class="sm-mapfs-only sm-hud items-center gap-4" style="top:64px;left:22px">
+            <div id="sm-laos-fs-clock" class="text-4xl font-bold text-white tabular-nums" style="text-shadow:0 0 18px rgba(34,211,238,.35)">--:--:--</div>
+            <div id="sm-laos-fs-level" class="px-3 py-1 rounded-lg text-sm font-black uppercase tracking-[.2em]" style="border:2px solid #30363d">—</div>
+            <div id="sm-laos-fs-scope" class="text-[11px] tracking-wider" style="color:#4b6b7a"></div>
+        </div>
+        <div class="sm-mapfs-only absolute flex-col" style="z-index:4;top:118px;right:22px;bottom:100px;width:360px">
+            <div class="sm-glass flex flex-col min-h-0 overflow-hidden">
+                <div class="sm-glass-title"><span class="w-1.5 h-1.5 rounded-full" style="background:#22d3ee"></span>TOP PROVINCES · <span id="sm-laos-fs-metric">USERS</span></div>
+                <div class="px-2 pb-2 space-y-0.5 overflow-hidden" id="sm-laos-fs-rank"></div>
+            </div>
+        </div>
+        <div class="sm-mapfs-only sm-glass absolute items-stretch divide-x divide-white/5" style="z-index:4;bottom:16px;left:50%;transform:translateX(-50%)">
+            <div class="sm-fs-kpi"><b id="sm-laos-k-users" style="color:#22d3ee">0</b><span>LAO USERS</span></div>
+            <div class="sm-fs-kpi"><b id="sm-laos-k-req" style="color:#60a5fa">0</b><span>REQUESTS</span></div>
+            <div class="sm-fs-kpi"><b id="sm-laos-k-prov" style="color:#a78bfa">0</b><span>PROVINCES</span></div>
+            <div class="sm-fs-kpi"><b id="sm-laos-k-share" style="color:#34d399">0%</b><span>OF TRAFFIC</span></div>
+            <div class="sm-fs-kpi"><b id="sm-laos-k-threats" style="color:#f87171">0</b><span>THREATS FROM LAOS</span></div>
+        </div>
+
+        <div id="sm-lao-empty" class="hidden absolute inset-0 z-[5] flex items-center justify-center pointer-events-none">
+            <div class="sm-hud-box text-xs text-center max-w-md" style="color:#93c5fd;border-color:rgba(96,165,250,.4)">
+                <div class="font-bold mb-1">No clients located in Laos yet</div>
+                <div class="sm-muted" id="sm-lao-empty-why"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sm-panel flex flex-col">
+        <div class="sm-head"><div><div class="sm-title">Provinces <span class="lao font-normal sm-muted">· ແຂວງ</span></div>
+            <div class="sm-sub">Ranked by <span id="sm-lao-rank-metric">users</span> · click to highlight on map</div></div></div>
+        <div class="p-2 space-y-0.5 sm-scroll overflow-y-auto flex-1" style="max-height:600px" id="sm-lao-rank"></div>
+    </div>
+</div>
+
+{# ── Timeline + severity breakdown ─────────────────────────────────────── #}
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <div class="sm-panel xl:col-span-2 flex flex-col">
+        <div class="sm-head">
+            <div><div class="sm-title">Threat Timeline</div><div class="sm-sub">Last 2 hours · 5-minute buckets · stacked by severity</div></div>
+            <div class="flex items-center gap-3 text-xs flex-wrap justify-end" id="sm-tl-legend"></div>
+        </div>
+        <div class="p-3 flex-1"><svg id="sm-timeline" viewBox="0 0 800 280" class="w-full h-full" style="min-height:260px" preserveAspectRatio="none"></svg></div>
+    </div>
+    <div class="sm-panel flex flex-col">
+        <div class="sm-head"><div><div class="sm-title">Attack Breakdown</div><div class="sm-sub">Severity mix and detections by type</div></div></div>
+        <div class="p-4 flex items-center gap-4">
+            <svg id="sm-donut" viewBox="0 0 140 140" style="width:140px;height:140px;flex-shrink:0"></svg>
+            <div class="flex-1 space-y-1.5 min-w-0" id="sm-donut-legend"></div>
+        </div>
+        <div class="px-4 pb-4 space-y-3 sm-scroll overflow-y-auto flex-1" style="max-height:210px" id="sm-categories"></div>
+    </div>
+</div>
+
+{# ── Attackers + behaviours / nginx signals ───────────────────────────── #}
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <div class="sm-panel xl:col-span-2">
+        <div class="sm-head">
+            <div><div class="sm-title">Top Attacker IPs</div><div class="sm-sub">Risk-scored by attack type, variety, volume and whether attacks were served</div></div>
+            <button class="sm-btn sm-btn-danger" onclick="smOpenBlocklist()">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                Blocklist (<span id="sm-bl-count">0</span>)
+            </button>
+        </div>
+        <div class="overflow-auto sm-scroll" style="max-height:420px">
+            <table class="sm-table">
+                <thead><tr><th style="width:28px"></th><th>IP</th><th>Risk</th><th>Threat / Total</th><th>Attack types</th><th>Last seen</th><th></th></tr></thead>
+                <tbody id="sm-attackers"><tr><td colspan="7" class="sm-muted text-center py-8">Waiting for data…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+    <div class="space-y-4">
+        <div class="sm-panel">
+            <div class="sm-head"><div><div class="sm-title">Behavioural Detections</div><div class="sm-sub" id="sm-thresholds"></div></div></div>
+            <div class="p-3 space-y-2 sm-scroll overflow-y-auto" style="max-height:190px" id="sm-behaviors"></div>
+        </div>
+        <div class="sm-panel">
+            <div class="sm-head"><div><div class="sm-title">Nginx Defensive Signals</div><div class="sm-sub">From error.log</div></div></div>
+            <div class="p-4 space-y-2" id="sm-errsignals"></div>
+        </div>
+    </div>
+</div>
+
+{# ── Live event feed ───────────────────────────────────────────────────── #}
+<div class="sm-panel" id="sm-feed-panel">
+    <div class="sm-head flex-wrap">
+        <div><div class="sm-title">Live Security Events</div><div class="sm-sub">Most recent 200 suspicious requests · payloads shown escaped</div></div>
+        <div class="flex flex-wrap items-center gap-2">
+            <span id="sm-ipfilter" class="hidden chip" style="color:#fca5a5;border-color:rgba(248,113,113,.5)"></span>
+            <select id="sm-f-sev" class="sm-input" onchange="smRenderEvents()">
+                <option value="">All severities</option><option value="critical">Critical</option><option value="high">High+</option><option value="medium">Medium+</option>
+            </select>
+            <select id="sm-f-cat" class="sm-input" onchange="smRenderEvents()"><option value="">All categories</option></select>
+            <select id="sm-f-out" class="sm-input" onchange="smRenderEvents()">
+                <option value="">Any outcome</option><option value="served">Served (2xx/3xx)</option><option value="blocked">Blocked</option><option value="failed">Failed (4xx/5xx)</option>
+            </select>
+            <input id="sm-f-q" class="sm-input" placeholder="Search path / UA / IP…" oninput="smRenderEvents()" style="width:200px">
+        </div>
+    </div>
+    <div class="overflow-auto sm-scroll" style="max-height:460px">
+        <table class="sm-table">
+            <thead><tr><th>Time</th><th>Severity</th><th>Source</th><th>Request</th><th>Status</th><th>Detected</th></tr></thead>
+            <tbody id="sm-events"><tr><td colspan="6" class="sm-muted text-center py-8">Waiting for data…</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+{# ── Hardening audit + certs + app audit ──────────────────────────────── #}
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4" id="sm-audit-panel">
+    <div class="sm-panel xl:col-span-2">
+        <div class="sm-head">
+            <div><div class="sm-title">Nginx Hardening Audit</div><div class="sm-sub" id="sm-audit-sub">Static analysis of nginx.conf, conf.d, snippets and enabled sites</div></div>
+            <button class="sm-btn" onclick="smLoadAudit()">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Re-scan
+            </button>
+        </div>
+        <div class="p-4 flex flex-col md:flex-row gap-5">
+            <div class="flex flex-col items-center flex-shrink-0" style="width:150px">
+                <svg viewBox="0 0 120 120" width="130" height="130">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="#21262d" stroke-width="10"/>
+                    <circle id="sm-ring" cx="60" cy="60" r="50" fill="none" stroke="#8b949e" stroke-width="10" stroke-linecap="round"
+                            stroke-dasharray="314.16" stroke-dashoffset="314.16" transform="rotate(-90 60 60)" style="transition:stroke-dashoffset .8s ease"/>
+                    <text x="60" y="58" text-anchor="middle" font-size="30" font-weight="800" fill="#c9d1d9" id="sm-ring-grade" font-family="ui-monospace,monospace">–</text>
+                    <text x="60" y="80" text-anchor="middle" font-size="12" fill="#6e7681" id="sm-ring-score">scanning</text>
+                </svg>
+                <div class="mt-2 text-xs text-center sm-muted" id="sm-audit-summary"></div>
+            </div>
+            <div class="flex-1 space-y-2 min-w-0" id="sm-checks"><div class="sm-muted text-sm">Scanning configuration…</div></div>
+        </div>
+    </div>
+
+    <div class="space-y-4">
+        <div class="sm-panel">
+            <div class="sm-head"><div><div class="sm-title">TLS Certificates</div><div class="sm-sub">Expiry in SSL directory</div></div></div>
+            <div class="p-3 space-y-2 sm-scroll overflow-y-auto" style="max-height:220px" id="sm-certs"><div class="sm-muted text-xs">Loading…</div></div>
+        </div>
+        {% if current_user and current_user.role == 'admin' %}
+        <div class="sm-panel">
+            <div class="sm-head"><div><div class="sm-title">Nginx UI Self-Audit</div><div class="sm-sub">This management app's own security</div></div></div>
+            <div class="p-3 space-y-2" id="sm-app"><div class="sm-muted text-xs">Loading…</div></div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+</div>
+
+{# ── Blocklist modal ───────────────────────────────────────────────────── #}
+<div id="sm-bl-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(1,4,9,.75)">
+    <div class="sm-panel w-full max-w-2xl" style="border-color:#30363d">
+        <div class="sm-head">
+            <div><div class="sm-title">Generate nginx Blocklist</div><div class="sm-sub">Nothing is applied automatically — review, then add it yourself</div></div>
+            <button class="sm-btn" onclick="smCloseBlocklist()">✕</button>
+        </div>
+        <div class="p-4 space-y-3">
+            <div class="flex gap-2">
+                <input id="sm-bl-add" class="sm-input flex-1 font-mono" placeholder="Add IP or CIDR manually, e.g. 203.0.113.7 or 198.51.100.0/24">
+                <button class="sm-btn" onclick="smBlAddManual()">Add</button>
+                <button class="sm-btn" onclick="smBlAddHighRisk()">+ All high/critical</button>
+            </div>
+            <div id="sm-bl-warn" class="hidden text-xs px-3 py-2 rounded-lg" style="background:rgba(250,204,21,.08);border:1px solid rgba(250,204,21,.35);color:#fde047"></div>
+            <pre class="sm-pre sm-scroll overflow-auto" style="max-height:300px" id="sm-bl-out"></pre>
+            <div class="text-xs sm-muted leading-relaxed">
+                Save as <code class="sm-text">/etc/nginx/conf.d/blocklist.conf</code> (loaded inside <code class="sm-text">http{}</code>), or paste into a
+                <code class="sm-text">server{}</code> block via the config editor. Then run <code class="sm-text">nginx -t</code> and reload.
+                Behind Cloudflare / a load balancer, configure <code class="sm-text">real_ip_header</code> first or you'll block the proxy.
+            </div>
+            <div class="flex justify-between">
+                <button class="sm-btn" onclick="smBlClear()">Clear</button>
+                <button class="sm-btn sm-btn-danger" onclick="smCopy(document.getElementById('sm-bl-out').textContent, this)">Copy snippet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div></div>
+
+<script src="/static/vendor/d3.min.js"></script>
+<script src="/static/vendor/topojson-client.min.js"></script>
+<script src="/static/js/security-map.js"></script>
+<script src="/static/js/laos-map.js"></script>
+<script>
+const IS_ADMIN = {{ 'true' if current_user and current_user.role == 'admin' else 'false' }};
+const NODES = [{% for n in all_nodes %}{ id: {{ n.id | tojson }}, name: {{ n.name | tojson }} },{% endfor %}];
+const SEV_COLOR = { critical:'#f87171', high:'#fb923c', medium:'#facc15', low:'#60a5fa', info:'#8b949e' };
+const SEV_RANK  = { info:0, low:1, medium:2, high:3, critical:4 };
+const LEVELS = {
+    critical: { color:'#f87171', glow:'rgba(248,113,113,.28)', desc:'Active critical attacks (RCE / Log4Shell / flood) in the last 15 min' },
+    high:     { color:'#fb923c', glow:'rgba(251,146,60,.24)',  desc:'High-severity attacks in the last 15 min' },
+    elevated: { color:'#facc15', glow:'rgba(250,204,21,.18)',  desc:'Ongoing probing / scanning activity' },
+    guarded:  { color:'#60a5fa', glow:'rgba(96,165,250,.18)',  desc:'Historic attacks in window, nothing recent' },
+    low:      { color:'#34d399', glow:'rgba(52,211,153,.18)',  desc:'No suspicious traffic detected' },
+};
+const LEVEL_ORDER = ['low','guarded','elevated','high','critical'];
+const CHECK_LOG_LINK = { hidden_files:['sensitive'], rate_limit:['brute_force','flood'], autoindex:['enumeration'], server_tokens:['scanner'] };
+
+let ACTIVE_NODE = {{ (active_node_id or 'local') | tojson }};
+let ws = null, wsTimer = null, wsDelay = 1000, paused = false;
+let data = null, ipFilter = '', seenEvents = new Set(), firstRender = true;
+const blocklist = new Set();
+
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function sevBadge(s) { return `<span class="sev sev-${esc(s)}">${esc(s)}</span>`; }
+function fmtTime(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso); if (isNaN(d)) return esc(iso);
+    const p = n => String(n).padStart(2,'0');
+    const today = new Date().toDateString() === d.toDateString();
+    return (today ? '' : `${p(d.getMonth()+1)}-${p(d.getDate())} `) + `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function ago(iso) {
+    if (!iso) return '';
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (isNaN(s)) return '';
+    if (s < 60) return Math.max(0, Math.round(s)) + 's ago';
+    if (s < 3600) return Math.round(s/60) + 'm ago';
+    if (s < 86400) return Math.round(s/3600) + 'h ago';
+    return Math.round(s/86400) + 'd ago';
+}
+function catLabel(id) { return (data?.categories || []).find(c => c.id === id)?.label || id; }
+function smCopy(text, btn) {
+    const done = () => { if (!btn) return; const t = btn.textContent; btn.textContent = 'Copied ✓'; setTimeout(() => btn.textContent = t, 1300); };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done);
+    else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); }
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────────
+function render(d) {
+    if (d.error) { $('sm-error').textContent = 'Error: ' + d.error; $('sm-error').classList.remove('hidden'); return; }
+    $('sm-error').classList.add('hidden');
+    data = d;
+
+    const ph = d.proxy_hint;
+    $('sm-proxy-hint').classList.toggle('hidden', !ph);
+    if (ph) $('sm-proxy-hint').innerHTML = `
+        <div class="font-bold mb-1">ℹ ${ph.share}% of requests come from one internal address (${esc(ph.ip)}) — nginx is logging your proxy / load balancer, not the real clients</div>
+        <div class="sm-muted">Attackers behind it all share that IP, so they can't be identified, located on the map, or blocked individually.
+        Make nginx log the real client IP, then add the proxy to <code class="sm-text">SECURITY_TRUSTED_IPS</code>:</div>
+        <pre class="sm-pre mt-2">set_real_ip_from ${esc(ph.ip)};      # your proxy / LB
+real_ip_header    X-Forwarded-For;  # or X-Real-IP, whichever the proxy sends
+real_ip_recursive on;</pre>`;
+    const down = d.unreachable || [];
+    $('sm-unreachable').classList.toggle('hidden', !down.length);
+    $('sm-unreachable').innerHTML = down.length ? 'Unreachable nodes (not analysed): ' + down.map(n => `<b>${esc(n.name)}</b> <span class="opacity-70">${esc(n.error)}</span>`).join(' · ') : '';
+
+    // Level gauge
+    const L = LEVELS[d.threat_level] || LEVELS.low;
+    const lvlIdx = Math.max(0, LEVEL_ORDER.indexOf(d.threat_level));
+    $('sm-level').textContent = d.threat_level; $('sm-level').style.color = L.color;
+    $('sm-level').style.textShadow = `0 0 28px ${L.color}66`;
+    $('sm-level-desc').textContent = d.level_reason || L.desc;
+    $('sm-level-card').style.setProperty('--lvl-glow', L.glow);
+    $('sm-level-card').style.borderColor = d.threat_level === 'low' ? '#21262d' : L.color + '66';
+    $('sm-needle').style.transform = `rotate(${-90 + (lvlIdx + .5) * 36}deg)`;
+    $('sm-tv-level').textContent = d.threat_level;
+    $('sm-tv-level').style.color = L.color; $('sm-tv-level').style.borderColor = L.color + '99';
+    $('sm-tv-level').style.background = L.glow;
+
+    // KPI cards: count-up value + sparkline + 30-min trend
+    const tl = d.timeline;
+    const sevSum = b => b.low + b.medium + b.high + b.critical;
+    kpi('threats', d.threat_requests, tl.map(sevSum));
+    $('kpi-threats-sub').textContent = `${d.threat_ratio}% of ${d.analyzed_requests.toLocaleString()} requests`;
+    kpi('attackers', d.unique_attackers, tl.map(b => b.attackers));
+    $('kpi-attackers-sub').textContent = `${d.attackers.filter(a => a.risk === 'critical' || a.risk === 'high').length} high-risk · ${d.attackers.filter(a => !a.internal).length} external`;
+    kpi('crit', (d.severity.critical || 0) + (d.severity.high || 0), tl.map(b => b.critical + b.high));
+    kpi('blocked', d.outcomes.blocked || 0, tl.map(b => b.blocked));
+    kpi('served', d.outcomes.served || 0, tl.map(b => b.served));
+    const lastBucket = tl[tl.length - 1] || { total: 0 };
+    kpi('rpm', Math.round(lastBucket.total / (d.timeline_bucket_seconds / 60)), tl.map(b => b.total));
+    renderDonut(d.severity);
+
+    const w = d.window || {};
+    $('sm-window').textContent = w.from ? `Window: ${fmtTime(w.from)} → ${fmtTime(w.to)}` : '';
+    $('sm-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    $('sm-updated').style.color = '';
+    $('sm-thresholds').textContent = `brute ≥${d.thresholds.brute_force} · 404 enum ≥${d.thresholds.enumeration_404} · flood ≥${d.thresholds.flood_rpm}/min`;
+
+    renderTimeline(d.timeline, d.timeline_bucket_seconds);
+    renderGeo(d);
+    renderNodes(d);
+    renderLaos(d);
+    renderCategories(d.categories);
+    renderAttackers(d.attackers);
+    renderBehaviors(d.behaviors);
+    renderErrSignals(d.errors);
+    refreshCatFilter(d.categories);
+    smRenderEvents();
+    if (lastAudit) renderAudit(lastAudit);   // refresh log ↔ config correlation badges
+}
+
+// ── Charts ───────────────────────────────────────────────────────────────────
+// Smooth curve through points; control points are clamped to each segment's
+// y-range so the line never overshoots below zero or above a peak.
+function smoothSegs(pts) {
+    let d = '';
+    for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2, t = 0.18;
+        const lo = Math.min(p1[1], p2[1]), hi = Math.max(p1[1], p2[1]);
+        const c1y = Math.min(hi, Math.max(lo, p1[1] + (p2[1] - p0[1]) * t));
+        const c2y = Math.min(hi, Math.max(lo, p2[1] - (p3[1] - p1[1]) * t));
+        d += ` C${(p1[0] + (p2[0] - p0[0]) * t).toFixed(1)},${c1y.toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) * t).toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+    }
+    return d;
+}
+function niceMax(v) {
+    if (v <= 4) return 4;
+    const p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p;
+    return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p;
+}
+function countUp(el, to) {
+    const from = el._v ?? 0; el._v = to;
+    cancelAnimationFrame(el._raf);
+    if (from === to) { el.textContent = to.toLocaleString(); return; }
+    const t0 = performance.now(), dur = 900;
+    const step = now => {
+        const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+        el.textContent = Math.round(from + (to - from) * e).toLocaleString();
+        if (k < 1) el._raf = requestAnimationFrame(step);
+    };
+    el._raf = requestAnimationFrame(step);
+}
+function spark(svg, series, color) {
+    const W = 200, H = 46, n = series.length, max = Math.max(1, ...series);
+    const pts = series.map((v, i) => [i * W / (n - 1), H - 2 - v / max * (H - 8)]);
+    const gid = svg.id + '-g', line = `M${pts[0][0]},${pts[0][1].toFixed(1)}${smoothSegs(pts)}`;
+    svg.innerHTML = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="${color}" stop-opacity=".42"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+        <path d="${line} L${W},${H} L0,${H} Z" fill="url(#${gid})"/>
+        <path d="${line}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>`;
+}
+function kpi(key, value, series) {
+    const el = $('kpi-' + key), card = el.closest('.sm-kpi');
+    const color = getComputedStyle(card).getPropertyValue('--c').trim();
+    countUp(el, value);
+    spark($('spark-' + key), series, color);
+    const now = series.slice(-6).reduce((a, b) => a + b, 0), prev = series.slice(-12, -6).reduce((a, b) => a + b, 0);
+    const dEl = $('delta-' + key);
+    if (!now && !prev) { dEl.textContent = ''; return; }
+    const pct = prev ? Math.round((now - prev) / prev * 100) : 100, up = now >= prev;
+    const trend = card.dataset.trend;
+    dEl.textContent = !prev ? '▲ new' : (pct === 0 ? '■ ' : up ? '▲ ' : '▼ ') + Math.abs(pct) + '%';
+    dEl.style.color = trend === 'neutral' || pct === 0 ? '#8b949e' : (up === (trend === 'good')) ? '#34d399' : '#f87171';
+}
+
+function renderGauge() {
+    const arc = (a0, a1, r) => {
+        const rad = a => a * Math.PI / 180, p = a => [100 + r * Math.cos(rad(a)), 100 - r * Math.sin(rad(a))];
+        const [x0, y0] = p(a0), [x1, y1] = p(a1);
+        return `M${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 0 1 ${x1.toFixed(2)},${y1.toFixed(2)}`;
+    };
+    $('sm-gauge-arcs').innerHTML = LEVEL_ORDER.map((lvl, i) => {
+        const a0 = 180 - i * 36 - (i ? 1.5 : 0), a1 = 180 - (i + 1) * 36 + (i < 4 ? 1.5 : 0);
+        return `<path d="${arc(a0, a1, 78)}" fill="none" stroke="${LEVELS[lvl].color}" stroke-width="16" opacity=".9"/>`;
+    }).join('') + `<path d="${arc(180, 0, 62)}" fill="none" stroke="#21262d" stroke-width="2" stroke-dasharray="2 5"/>`;
+}
+
+function renderDonut(sev) {
+    const keys = ['critical', 'high', 'medium', 'low'];
+    const total = keys.reduce((s, k) => s + (sev[k] || 0), 0);
+    const R = 54, C = 2 * Math.PI * R;
+    let off = 0, rings = `<circle cx="70" cy="70" r="${R}" fill="none" stroke="#161b22" stroke-width="16"/>`;
+    if (total) keys.forEach(k => {
+        const len = (sev[k] || 0) / total * C;
+        if (!len) return;
+        rings += `<circle cx="70" cy="70" r="${R}" fill="none" stroke="${SEV_COLOR[k]}" stroke-width="16"
+            stroke-dasharray="${Math.max(0, len - 2).toFixed(2)} ${(C - Math.max(0, len - 2)).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"
+            transform="rotate(-90 70 70)" style="transition:all .6s"><title>${k}: ${sev[k]}</title></circle>`;
+        off += len;
+    });
+    $('sm-donut').innerHTML = rings +
+        `<text x="70" y="68" text-anchor="middle" font-size="26" font-weight="800" fill="#e6edf3" font-family="ui-monospace,monospace">${total.toLocaleString()}</text>
+         <text x="70" y="86" text-anchor="middle" font-size="10" fill="#6e7681" letter-spacing="1">THREATS</text>`;
+    $('sm-donut-legend').innerHTML = keys.map(k => `
+        <div class="flex items-center gap-2 text-xs">
+            <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0" style="background:${SEV_COLOR[k]}"></span>
+            <span class="capitalize sm-text flex-1">${k}</span>
+            <span class="font-mono font-bold" style="color:${SEV_COLOR[k]}">${(sev[k] || 0).toLocaleString()}</span>
+            <span class="font-mono sm-muted w-10 text-right">${total ? Math.round((sev[k] || 0) / total * 100) : 0}%</span>
+        </div>`).join('');
+}
+
+function renderTimeline(tl, bucketSec) {
+    const svg = $('sm-timeline');
+    const W = 800, H = 280, PL = 40, PR = 44, PT = 14, PB = 26, n = tl.length;
+    const keys = ['low', 'medium', 'high', 'critical'];
+    let base = new Array(n).fill(0);
+    const layers = keys.map(k => { const lo = base, up = tl.map((b, i) => lo[i] + b[k]); base = up; return { k, lo, up }; });
+    const max = niceMax(Math.max(...base)), maxT = niceMax(Math.max(1, ...tl.map(b => b.total)));
+    const x = i => PL + i * (W - PL - PR) / (n - 1);
+    const y = v => H - PB - v / max * (H - PB - PT);
+    const yT = v => H - PB - v / maxT * (H - PB - PT);
+    let out = '<defs>' + keys.map(k => `<linearGradient id="tlg-${k}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${SEV_COLOR[k]}" stop-opacity=".75"/><stop offset="1" stop-color="${SEV_COLOR[k]}" stop-opacity=".18"/></linearGradient>`).join('') + '</defs>';
+    for (let g = 0; g <= 4; g++) {
+        const v = max * g / 4, yy = y(v);
+        out += `<line x1="${PL}" x2="${W - PR}" y1="${yy}" y2="${yy}" stroke="${g ? '#161b22' : '#30363d'}"/>`;
+        out += `<text x="${PL - 6}" y="${yy + 3}" text-anchor="end" font-size="10" fill="#6e7681" font-family="ui-monospace,monospace">${Number.isInteger(v) ? v : v.toFixed(1)}</text>`;
+        out += `<text x="${W - PR + 6}" y="${yT(maxT * g / 4) + 3}" font-size="10" fill="#38bdf8" opacity=".55" font-family="ui-monospace,monospace">${Math.round(maxT * g / 4)}</text>`;
+    }
+    // all-traffic line (right axis)
+    const tp = tl.map((b, i) => [x(i), yT(b.total)]);
+    out += `<path d="M${tp[0][0]},${tp[0][1]}${smoothSegs(tp)}" fill="none" stroke="#38bdf8" stroke-opacity=".45" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+    // stacked severity areas. Outlines are drawn top layer first so where an
+    // upper layer is empty (its top == the layer below), the lower layer's
+    // colour is the one left visible.
+    const strokes = [];
+    layers.forEach(({ k, lo, up }) => {
+        if (!up.some((v, i) => v !== lo[i])) return;
+        const u = up.map((v, i) => [x(i), y(v)]), l = lo.map((v, i) => [x(i), y(v)]).reverse();
+        out += `<path class="sm-tl-area" d="M${u[0][0]},${u[0][1]}${smoothSegs(u)} L${l[0][0]},${l[0][1]}${smoothSegs(l)} Z" fill="url(#tlg-${k})"/>`;
+        strokes.push(`<path d="M${u[0][0]},${u[0][1]}${smoothSegs(u)}" fill="none" stroke="${SEV_COLOR[k]}" stroke-width="1.8"/>`);
+    });
+    out += strokes.reverse().join('');
+    // live "now" marker on top of the stack
+    const lastTop = base[n - 1];
+    out += `<line x1="${x(n - 1)}" x2="${x(n - 1)}" y1="${PT}" y2="${H - PB}" stroke="#f87171" stroke-opacity=".25" stroke-dasharray="2 3"/>`;
+    out += `<circle cx="${x(n - 1)}" cy="${y(lastTop)}" r="4" fill="#f87171"><animate attributeName="r" values="4;10;4" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;.25;1" dur="1.6s" repeatCount="indefinite"/></circle>`;
+    out += `<circle cx="${x(n - 1)}" cy="${y(lastTop)}" r="3.5" fill="#fff"/>`;
+    // hover targets
+    tl.forEach((b, i) => {
+        const minsAgo = (n - 1 - i) * bucketSec / 60, th = keys.reduce((s, k) => s + b[k], 0);
+        out += `<rect x="${x(i) - (W - PL - PR) / (n - 1) / 2}" y="${PT}" width="${(W - PL - PR) / (n - 1)}" height="${H - PB - PT}" fill="transparent">
+            <title>${minsAgo ? minsAgo + '–' + (minsAgo + bucketSec / 60) + ' min ago' : 'last 5 min'}\n${th} threats (C ${b.critical} · H ${b.high} · M ${b.medium} · L ${b.low})\n${b.total} requests · ${b.attackers} attacker IPs · ${b.blocked} blocked</title></rect>`;
+    });
+    [['-2h', 0], ['-90m', 6], ['-1h', 12], ['-30m', 18], ['now', n - 1]].forEach(([t, i]) => {
+        out += `<text x="${x(Math.min(i, n - 1))}" y="${H - 7}" text-anchor="middle" font-size="10" fill="#6e7681" font-family="ui-monospace,monospace">${t}</text>`;
+    });
+    svg.innerHTML = out;
+    $('sm-tl-legend').innerHTML = keys.slice().reverse().map(k => `<span class="flex items-center gap-1 sm-muted"><span class="w-2.5 h-2.5 rounded-sm" style="background:${SEV_COLOR[k]}"></span>${k}</span>`).join('')
+        + `<span class="flex items-center gap-1 sm-muted"><span class="w-4 border-t-2 border-dashed" style="border-color:#38bdf8"></span>all traffic (right axis)</span>`;
+}
+
+function renderCategories(cats) {
+    if (!cats.length) { $('sm-categories').innerHTML = '<div class="text-xs sm-muted py-6 text-center">No attacks detected 🎉</div>'; return; }
+    const max = Math.max(...cats.map(c => c.count));
+    $('sm-categories').innerHTML = cats.map(c => `
+        <div class="cursor-pointer" data-cat="${esc(c.id)}" onclick="smFilterCat(this.dataset.cat)">
+            <div class="flex items-center justify-between text-xs mb-1 gap-2">
+                <span class="truncate sm-text">${esc(c.label)}</span>
+                <span class="flex items-center gap-2">${sevBadge(c.severity)}<span class="font-mono font-bold" style="color:${SEV_COLOR[c.severity]}">${c.count.toLocaleString()}</span></span>
+            </div>
+            <div class="bar-wrap h-1.5"><div class="bar-fill" style="width:${(c.count/max*100).toFixed(1)}%;background:${SEV_COLOR[c.severity]}"></div></div>
+        </div>`).join('');
+}
+
+function renderAttackers(list) {
+    if (!list.length) { $('sm-attackers').innerHTML = '<tr><td colspan="7" class="sm-muted text-center py-8">No attacker IPs in this window</td></tr>'; return; }
+    $('sm-attackers').innerHTML = list.map(a => `
+        <tr>
+            <td><input type="checkbox" class="accent-red-500" ${blocklist.has(a.ip) ? 'checked' : ''} data-ip="${esc(a.ip)}" onchange="smToggleBlock(this.dataset.ip, this.checked)" title="Add to blocklist"></td>
+            <td>
+                <button class="font-mono font-bold hover:underline" style="color:#c9d1d9" data-ip="${esc(a.ip)}" onclick="smFilterIp(this.dataset.ip)" title="Show events from this IP">${esc(a.ip)}</button>
+                ${a.internal ? '<span class="chip ml-1" style="color:#60a5fa">internal</span>' : ''}
+                ${a.geo ? `<div class="text-[11px]" style="color:#8b949e">${SecMap.flag(a.geo.cc)} ${esc(a.geo.city ? a.geo.city + ', ' : '')}${esc(a.geo.country)}</div>` : ''}
+                ${a.nodes.length && ACTIVE_NODE === 'all' ? `<div class="text-[10px] sm-muted">${a.nodes.map(esc).join(', ')}</div>` : ''}
+                <div class="text-[10px] sm-muted truncate" style="max-width:220px" title="${esc(a.ua)}">${esc(a.ua)}</div>
+            </td>
+            <td>
+                <div class="flex items-center gap-2">${sevBadge(a.risk)}<span class="font-mono font-bold" style="color:${SEV_COLOR[a.risk]}">${a.score}</span></div>
+                <div class="bar-wrap h-1 mt-1" style="width:70px"><div class="bar-fill" style="width:${a.score}%;background:${SEV_COLOR[a.risk]}"></div></div>
+            </td>
+            <td class="font-mono">
+                <span style="color:#f87171">${a.threat_hits.toLocaleString()}</span><span class="sm-muted"> / ${a.hits.toLocaleString()}</span>
+                ${a.served_threats ? `<div class="text-[10px]" style="color:#facc15">⚠ ${a.served_threats} served</div>` : ''}
+                ${a.blocked ? `<div class="text-[10px]" style="color:#34d399">${a.blocked} blocked</div>` : ''}
+            </td>
+            <td><div class="flex flex-wrap gap-1" style="max-width:260px">${a.categories.map(c => `<span class="chip">${esc(catLabel(c))}</span>`).join('')}</div></td>
+            <td class="whitespace-nowrap"><div class="sm-text">${esc(ago(a.last_seen))}</div><div class="text-[10px] sm-muted">${a.peak_rpm} req/min peak</div></td>
+            <td class="whitespace-nowrap"><button class="sm-btn" style="padding:3px 8px" data-ip="${esc(a.ip)}" onclick="smCopy('deny ' + this.dataset.ip + ';', this)">deny</button></td>
+        </tr>`).join('');
+}
+
+function renderBehaviors(list) {
+    $('sm-behaviors').innerHTML = list.length ? list.map(b => `
+        <div class="rounded-lg px-3 py-2" style="background:#161b22;border-left:3px solid ${SEV_COLOR[b.severity]}">
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-bold sm-text">${esc(catLabel(b.type))}</span>${sevBadge(b.severity)}
+            </div>
+            <button class="font-mono text-xs hover:underline" style="color:${b.internal ? '#93c5fd' : '#fca5a5'}" data-ip="${esc(b.ip)}" onclick="smFilterIp(this.dataset.ip)">${esc(b.ip)}</button>
+            ${b.internal ? '<span class="chip ml-1" style="color:#60a5fa">internal · not counted</span>' : ''}
+            <div class="text-[11px] sm-muted">${esc(b.detail)}</div>
+        </div>`).join('') : '<div class="text-xs sm-muted py-4 text-center">No brute force, enumeration or flood patterns</div>';
+}
+
+function renderErrSignals(e) {
+    const sig = (e.signals || []);
+    const max = Math.max(1, ...sig.map(s => s.count));
+    const good = new Set(['rate_limited','conn_limited','denied_rule','dir_listing','oversized_body']);
+    $('sm-errsignals').innerHTML = sig.map(s => `
+        <div title="${good.has(s.id) ? 'nginx actively defended' : 'possible attack noise or availability issue'}">
+            <div class="flex justify-between text-xs mb-0.5"><span class="sm-text">${esc(s.label)}</span>
+                <span class="font-mono font-bold" style="color:${s.count ? (good.has(s.id) ? '#34d399' : '#fb923c') : '#484f58'}">${s.count.toLocaleString()}</span></div>
+            <div class="bar-wrap h-1"><div class="bar-fill" style="width:${(s.count/max*100).toFixed(1)}%;background:${good.has(s.id) ? '#34d399' : '#fb923c'}"></div></div>
+        </div>`).join('');
+}
+
+function refreshCatFilter(cats) {
+    const sel = $('sm-f-cat'), cur = sel.value;
+    const opts = '<option value="">All categories</option>' + cats.map(c => `<option value="${esc(c.id)}">${esc(c.label)} (${c.count})</option>`).join('');
+    if (sel.dataset.sig !== opts) { sel.innerHTML = opts; sel.dataset.sig = opts; sel.value = cur; }
+}
+
+function smRenderEvents() {
+    if (!data) return;
+    const sev = $('sm-f-sev').value, cat = $('sm-f-cat').value, out = $('sm-f-out').value, q = $('sm-f-q').value.trim().toLowerCase();
+    const minRank = sev ? SEV_RANK[sev] : 0;
+    const rows = data.events.filter(e =>
+        (!ipFilter || e.ip === ipFilter) &&
+        (!sev || (sev === 'critical' ? e.severity === 'critical' : SEV_RANK[e.severity] >= minRank)) &&
+        (!cat || e.cats.includes(cat)) &&
+        (!out || e.outcome === out) &&
+        (!q || (e.path + ' ' + e.ua + ' ' + e.ip).toLowerCase().includes(q)));
+
+    $('sm-ipfilter').classList.toggle('hidden', !ipFilter);
+    $('sm-ipfilter').innerHTML = ipFilter ? `IP: ${esc(ipFilter)} <button onclick="smFilterIp('')" class="ml-1">✕</button>` : '';
+
+    if (!rows.length) { $('sm-events').innerHTML = `<tr><td colspan="6" class="sm-muted text-center py-8">${data.events.length ? 'No events match the filters' : 'No suspicious requests in this window'}</td></tr>`; return; }
+    const outColor = { served:'#facc15', blocked:'#34d399', failed:'#8b949e' };
+    $('sm-events').innerHTML = rows.map(e => {
+        const key = e.dt_iso + e.ip + e.path;
+        const isNew = !firstRender && !seenEvents.has(key);
+        seenEvents.add(key);
+        return `<tr class="${isNew ? 'sm-row-in' : ''}">
+            <td class="font-mono whitespace-nowrap sm-muted">${fmtTime(e.dt_iso)}</td>
+            <td>${sevBadge(e.severity)}</td>
+            <td class="whitespace-nowrap">
+                <button class="font-mono hover:underline sm-text" data-ip="${esc(e.ip)}" onclick="smFilterIp(this.dataset.ip)">${esc(e.ip)}</button>
+                ${e.node && ACTIVE_NODE === 'all' ? `<div class="text-[10px] sm-muted">${esc(e.node)}</div>` : ''}
+            </td>
+            <td style="max-width:520px">
+                <div class="font-mono break-all"><span style="color:#d2a8ff">${esc(e.method)}</span> <span class="sm-text">${esc(e.path)}</span></div>
+                <div class="text-[10px] sm-muted truncate" title="${esc(e.ua)}">${esc(e.ua)}</div>
+            </td>
+            <td class="font-mono whitespace-nowrap" style="color:${outColor[e.outcome]}">${e.status}<div class="text-[10px]">${esc(e.outcome)}</div></td>
+            <td><div class="flex flex-wrap gap-1">${e.cats.map(c => `<span class="chip">${esc(catLabel(c))}</span>`).join('')}</div></td>
+        </tr>`;
+    }).join('');
+    firstRender = false;
+    if (seenEvents.size > 5000) seenEvents = new Set([...seenEvents].slice(-2000));
+}
+
+function smFilterIp(ip) { ipFilter = ip; smRenderEvents(); if (ip) $('sm-feed-panel').scrollIntoView({ behavior:'smooth', block:'start' }); }
+function smFilterCat(id) { $('sm-f-cat').value = id; smRenderEvents(); $('sm-feed-panel').scrollIntoView({ behavior:'smooth', block:'start' }); }
+
+// ── Fleet status ─────────────────────────────────────────────────────────────
+function scopeLabel(d) {
+    if (ACTIVE_NODE !== 'all') return ACTIVE_NODE === 'local' ? 'Local node' : (NODES.find(n => n.id === ACTIVE_NODE)?.name || '');
+    const nodes = d?.nodes || [], on = nodes.filter(n => n.reachable).length;
+    return `All nodes · ${on}/${nodes.length} online`;
+}
+function renderNodes(d) {
+    $('sm-tv-scope').textContent = scopeLabel(d);
+    $('sm-fs-scope').textContent = scopeLabel(d).toUpperCase();
+    const panel = $('sm-nodes-panel');
+    panel.classList.toggle('hidden', ACTIVE_NODE !== 'all');
+    if (ACTIVE_NODE !== 'all') return;
+    const nodes = d.nodes || [];
+    const on = nodes.filter(n => n.reachable).length, off = nodes.length - on;
+    $('sm-nodes-summary').innerHTML =
+        `<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#34d399"></span><span class="sm-text font-bold">${on}</span><span class="sm-muted">online</span></span>` +
+        `<span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full ${off ? 'sm-live-dot' : ''}" style="background:${off ? '#f87171' : '#484f58'}"></span><span class="font-bold" style="color:${off ? '#f87171' : '#8b949e'}">${off}</span><span class="sm-muted">offline</span></span>`;
+    const maxT = Math.max(1, ...nodes.map(n => n.threats));
+    $('sm-nodes').innerHTML = nodes.map(n => {
+        const sev = !n.reachable ? 'offline' : n.critical ? 'critical' : n.high ? 'high' : n.threats ? 'medium' : 'clean';
+        const color = { offline: '#f87171', critical: SEV_COLOR.critical, high: SEV_COLOR.high, medium: SEV_COLOR.medium, clean: '#34d399' }[sev];
+        const body = !n.reachable
+            ? `<div class="mt-3 text-[11px] font-mono break-all" style="color:#fca5a5">${esc(n.error || 'unreachable')}</div>
+               <div class="mt-2 text-[10px] sm-muted">Logs from this node are not in the analysis.</div>`
+            : `<div class="grid grid-cols-3 gap-2 mt-3">
+                   <div><div class="font-mono font-black text-2xl leading-none" style="color:${n.threats ? '#f87171' : '#484f58'}">${n.threats.toLocaleString()}</div><div class="text-[9px] tracking-widest sm-muted mt-1">THREATS</div></div>
+                   <div><div class="font-mono font-black text-2xl leading-none" style="color:${n.attackers ? '#fb923c' : '#484f58'}">${n.attackers.toLocaleString()}</div><div class="text-[9px] tracking-widest sm-muted mt-1">ATTACKERS</div></div>
+                   <div><div class="font-mono font-black text-2xl leading-none" style="color:${n.critical + n.high ? '#f43f5e' : '#484f58'}">${(n.critical + n.high).toLocaleString()}</div><div class="text-[9px] tracking-widest sm-muted mt-1">CRIT+HIGH</div></div>
+               </div>
+               <div class="flex h-1.5 rounded-full overflow-hidden mt-3" style="background:#0d1117;width:${Math.max(4, n.threats / maxT * 100).toFixed(1)}%">
+                   ${['critical', 'high', 'medium', 'low'].map(k => n[k] ? `<div style="flex:${n[k]};background:${SEV_COLOR[k]}"></div>` : '').join('')}
+               </div>
+               <div class="flex justify-between text-[10px] sm-muted mt-2">
+                   <span>${n.requests.toLocaleString()} requests · ${n.blocked.toLocaleString()} blocked</span>
+                   <span>${n.last_threat ? 'last ' + esc(ago(n.last_threat)) : 'no threats'}</span>
+               </div>`;
+        return `<div class="rounded-xl p-3.5 cursor-pointer transition-colors hover:brightness-125" style="background:#161b22;border:1px solid ${color}55;box-shadow:inset 3px 0 0 ${color}"
+                     data-node="${esc(n.id)}" onclick="smSelectNode(this.dataset.node)" title="Open ${esc(n.name)}">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 ${n.reachable ? '' : 'sm-live-dot'}" style="background:${n.reachable ? '#34d399' : '#f87171'};box-shadow:0 0 8px ${n.reachable ? '#34d399' : '#f87171'}"></span>
+                <span class="font-bold text-sm sm-text truncate">${esc(n.name)}</span>
+                <span class="font-mono text-[10px] sm-muted truncate">${esc(n.host)}</span>
+                <span class="ml-auto sev" style="color:${color};border-color:${color}77;background:${color}1a">${sev}</span>
+            </div>${body}
+        </div>`;
+    }).join('');
+}
+
+// ── Global threat map ────────────────────────────────────────────────────────
+let mapReady = false, tickerSeen = new Set();
+function renderGeo(d) {
+    const g = d.geo;
+    if (!g) return;
+    $('sm-map-missing').classList.toggle('hidden', g.available);
+    $('sm-map-missing-why').textContent = g.error || '';
+    $('sm-map-home').textContent = g.home.label;
+    $('sm-map-countries').textContent = g.country_count;
+    $('sm-map-located').textContent = g.located;
+    const cutoff = Date.now() - 15 * 60 * 1000;
+    $('sm-map-live').textContent = d.events.filter(e => e.cc && new Date(e.dt_iso).getTime() >= cutoff).length;
+    $('sm-map-unlocated').textContent = g.unlocated ? `${g.unlocated} internal / unlocated source${g.unlocated > 1 ? 's' : ''} not shown` : '';
+    $('sm-map-attrib').textContent = [g.attribution, g.source].filter(Boolean).join(' · ');
+    if (mapReady) SecMap.update(g, d.events);
+
+    // Top countries (side panel + full-screen overlay)
+    const mx = Math.max(1, ...g.countries.map(c => c.hits));
+    const countryRows = n => g.countries.length ? g.countries.slice(0, n).map((c, i) => `
+        <div>
+            <div class="flex items-center gap-2 text-xs mb-1">
+                <span class="font-mono sm-muted w-4 text-right">${i + 1}</span>
+                <span class="text-base leading-none">${SecMap.flag(c.cc)}</span>
+                <span class="sm-text truncate flex-1">${esc(c.country)}</span>
+                <span class="sm-muted text-[10px]">${c.attackers} IP${c.attackers > 1 ? 's' : ''}</span>
+                <span class="font-mono font-bold" style="color:${SEV_COLOR[c.risk]}">${c.hits.toLocaleString()}</span>
+            </div>
+            <div class="bar-wrap h-1 ml-6"><div class="bar-fill" style="width:${(c.hits / mx * 100).toFixed(1)}%;background:linear-gradient(90deg,${SEV_COLOR[c.risk]}55,${SEV_COLOR[c.risk]})"></div></div>
+        </div>`).join('') : `<div class="text-xs sm-muted py-4 text-center">${g.available ? 'No external attack origins' : 'GeoIP unavailable'}</div>`;
+    $('sm-countries').innerHTML = countryRows(12);
+    $('sm-fs-countries').innerHTML = countryRows(6);
+
+    // Live ticker (side panel + full-screen overlay)
+    const items = d.events.slice(0, 25);
+    const tickerRows = n => items.length ? items.slice(0, n).map(e => {
+        const k = e.dt_iso + e.ip + e.path, isNew = tickerSeen.size && !tickerSeen.has(k);
+        return `<div class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-white/5 ${isNew ? 'sm-tick-in' : ''}" data-ip="${esc(e.ip)}" onclick="smFilterIp(this.dataset.ip)">
+            <span class="w-1 self-stretch rounded-full" style="background:${SEV_COLOR[e.severity]}"></span>
+            <span class="text-base leading-none">${e.cc ? SecMap.flag(e.cc) : '🏠'}</span>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2"><span class="font-mono text-xs sm-text truncate">${esc(e.ip)}</span><span class="text-[10px] sm-muted whitespace-nowrap">${esc(ago(e.dt_iso))}</span></div>
+                <div class="text-[10px] truncate" style="color:${SEV_COLOR[e.severity]}">${esc(catLabel(e.cats[0]))}${e.country ? ' · <span class="sm-muted">' + esc(e.country) + '</span>' : ''}</div>
+            </div></div>`;
+    }).join('') : '<div class="text-xs sm-muted py-4 text-center">No attacks</div>';
+    $('sm-ticker').innerHTML = tickerRows(25);
+    $('sm-fs-ticker').innerHTML = tickerRows(14);
+    items.forEach(e => tickerSeen.add(e.dt_iso + e.ip + e.path));
+
+    // Full-screen KPI strip + level
+    $('sm-fs-k-threats').textContent = d.threat_requests.toLocaleString();
+    $('sm-fs-k-attackers').textContent = d.unique_attackers.toLocaleString();
+    $('sm-fs-k-crit').textContent = ((d.severity.critical || 0) + (d.severity.high || 0)).toLocaleString();
+    $('sm-fs-k-countries').textContent = g.country_count;
+    $('sm-fs-k-blocked').textContent = (d.outcomes.blocked || 0).toLocaleString();
+    const L = LEVELS[d.threat_level] || LEVELS.low;
+    $('sm-fs-level').textContent = d.threat_level;
+    Object.assign($('sm-fs-level').style, { color: L.color, borderColor: L.color + '99', background: L.glow });
+    if (tickerSeen.size > 3000) tickerSeen = new Set([...tickerSeen].slice(-1000));
+}
+
+// ── Laos map ─────────────────────────────────────────────────────────────────
+let laosReady = false, laosSel = null;
+function smLaosMetric(m) {
+    if (!laosReady) return;
+    LaosMap.setMetric(m);
+    document.querySelectorAll('#sm-lao-metric button').forEach(b => b.classList.toggle('active', b.dataset.m === m));
+    if (data) renderLaos(data);
+}
+function smLaosPick(iso) {
+    laosSel = laosSel === iso ? null : iso;
+    if (laosReady) LaosMap.select(laosSel);
+    smMarkLaoRows(false);
+}
+function smMarkLaoRows(scroll) {
+    document.querySelectorAll('.lm-row').forEach(r => r.classList.toggle('sel', r.dataset.iso === laosSel));
+    if (scroll && laosSel) document.querySelector(`#sm-lao-rank .lm-row[data-iso="${laosSel}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+function renderLaos(d) {
+    const x = d.laos;
+    if (!x || typeof LaosMap === 'undefined') return;
+    const m = laosReady ? LaosMap.metric : 'users', M = LaosMap.METRICS[m];
+    $('sm-lao-users').textContent = x.users.toLocaleString();
+    $('sm-lao-prov').textContent = x.active_provinces;
+    $('sm-lao-share').textContent = x.share + '%';
+    $('sm-lao-rank-metric').textContent = M.label.toLowerCase();
+    $('sm-laos-fs-metric').textContent = M.label.toUpperCase();
+    $('sm-lao-legend-label').textContent = M.label.toUpperCase();
+    $('sm-lao-legend-label').style.color = M.accent;
+    $('sm-lao-legend-bar').style.background = `linear-gradient(90deg, ${M.low}, ${M.high})`;
+    const rows = [...x.provinces].sort((a, b) => b[m] - a[m] || b.users - a.users || a.name.localeCompare(b.name));
+    const max = Math.max(1, ...rows.map(r => r[m]));
+    $('sm-lao-legend-max').textContent = max.toLocaleString();
+    const row = (p, i, compact) => `
+        <div class="lm-row flex items-center gap-2 px-2 ${compact ? 'py-1' : 'py-1.5'} rounded-lg cursor-pointer ${p.iso === laosSel ? 'sel' : ''}" style="${p[m] ? '' : 'opacity:.45'}"
+             data-iso="${esc(p.iso)}" onclick="smLaosPick(this.dataset.iso)">
+            <span class="font-mono sm-muted w-5 text-right text-[11px]">${i + 1}</span>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs sm-text truncate">${esc(p.name)}</span>
+                    <span class="font-mono font-bold text-xs" style="color:${m === 'threats' ? '#f87171' : M.accent}">${p[m].toLocaleString()}</span></div>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="lao text-[11px] truncate" style="color:#6b9fb0">${esc(p.name_lo)}</span>
+                    ${compact ? '' : `<span class="text-[10px] sm-muted whitespace-nowrap">${p.users} users · ${p.requests.toLocaleString()} req${p.threats ? ` · <span style="color:#f87171">${p.threats} threats</span>` : ''}</span>`}</div>
+                <div class="bar-wrap h-1 mt-1"><div class="bar-fill" style="width:${(p[m] / max * 100).toFixed(1)}%;background:linear-gradient(90deg,${M.low},${M.high})"></div></div>
+            </div>
+        </div>`;
+    $('sm-lao-rank').innerHTML = rows.map((p, i) => row(p, i, false)).join('');
+    $('sm-laos-fs-rank').innerHTML = rows.slice(0, 10).map((p, i) => row(p, i, true)).join('');
+
+    $('sm-laos-k-users').textContent = x.users.toLocaleString();
+    $('sm-laos-k-req').textContent = x.requests.toLocaleString();
+    $('sm-laos-k-prov').textContent = `${x.active_provinces}/18`;
+    $('sm-laos-k-share').textContent = x.share + '%';
+    $('sm-laos-k-threats').textContent = x.provinces.reduce((s, p) => s + p.threats, 0).toLocaleString();
+    const Lv = LEVELS[d.threat_level] || LEVELS.low;
+    $('sm-laos-fs-level').textContent = d.threat_level;
+    Object.assign($('sm-laos-fs-level').style, { color: Lv.color, borderColor: Lv.color + '99', background: Lv.glow });
+    $('sm-laos-fs-scope').textContent = scopeLabel(d).toUpperCase();
+
+    $('sm-lao-empty').classList.toggle('hidden', x.users > 0);
+    $('sm-lao-empty-why').textContent = x.users ? '' :
+        d.proxy_hint ? `nginx logs your proxy (${d.proxy_hint.ip}) instead of real clients — configure real_ip (see the blue notice at the top).`
+        : !d.geo?.available ? 'GeoIP database not installed.'
+        : x.external_requests ? 'No requests from Lao IP addresses in the analysed window.' : 'No external client traffic in the analysed window.';
+    if (laosReady) LaosMap.update(x);
+}
+
+// ── Map-panel full screen (world map / Laos map) ─────────────────────────────
+// Native Fullscreen API on the panel; if the browser has none or refuses (no
+// user gesture, kiosk/embedded policies) it falls back to a fixed overlay over
+// the whole window — same look, Esc / button to exit.
+const FS_PANELS = {
+    world: { panel: 'sm-map-panel', label: 'sm-map-fs-label', icon: 'sm-map-fs-icon', text: 'Full screen map',
+             insets: { top: 40, right: 370, bottom: 92, left: 0 }, api: () => mapReady ? SecMap : null },
+    laos:  { panel: 'sm-laos-panel', label: 'sm-laos-fs-label', icon: 'sm-laos-fs-icon', text: 'Full screen Laos',
+             insets: { top: 70, right: 400, bottom: 100, left: 0 }, api: () => laosReady ? LaosMap : null },
+};
+const VIEW = new URLSearchParams(location.search).get('view');
+const FS_ICON_ENTER = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>';
+const FS_ICON_EXIT = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>';
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+const panelFsOn = k => { const p = $(FS_PANELS[k].panel); return fsElement() === p || p.classList.contains('sm-map-kiosk'); };
+
+function smPanelFullscreen(k) {
+    if (panelFsOn(k)) return smExitPanelFullscreen(k);
+    const el = $(FS_PANELS[k].panel), req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) return smPanelPseudo(k, true);
+    const p = req.call(el);
+    if (p && p.catch) p.catch(() => smPanelPseudo(k, true));
+}
+function smExitPanelFullscreen(k) {
+    if (fsElement() === $(FS_PANELS[k].panel)) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    smPanelPseudo(k, false);
+}
+function smPanelPseudo(k, on) {
+    $(FS_PANELS[k].panel).classList.toggle('sm-map-kiosk', on);
+    const anyKiosk = Object.values(FS_PANELS).some(c => $(c.panel).classList.contains('sm-map-kiosk'));
+    document.documentElement.style.overflow = anyKiosk ? 'hidden' : '';
+    smSyncPanels();
+}
+function smSyncPanels() {
+    for (const [k, c] of Object.entries(FS_PANELS)) {
+        const on = panelFsOn(k), p = $(c.panel), was = p.classList.contains('sm-map-fs');
+        p.classList.toggle('sm-map-fs', on);
+        $(c.label).textContent = on ? 'Exit  (Esc)' : c.text;
+        $(c.icon).innerHTML = on ? FS_ICON_EXIT : FS_ICON_ENTER;
+        const api = c.api();
+        if (api && (was !== on || !c.applied)) { api.setInsets(on ? c.insets : {}); c.applied = true; }  // keep map clear of overlays
+    }
+}
+const smMapFullscreen = () => smPanelFullscreen('world');
+const mapFsOn = () => panelFsOn('world');
+document.addEventListener('fullscreenchange', smSyncPanels);
+document.addEventListener('webkitfullscreenchange', smSyncPanels);
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        for (const k in FS_PANELS) if ($(FS_PANELS[k].panel).classList.contains('sm-map-kiosk')) smPanelPseudo(k, false);
+        return;
+    }
+    if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'm' || e.key === 'M') smPanelFullscreen('world');
+    else if (e.key === 'l' || e.key === 'L') smPanelFullscreen('laos');
+});
+
+// ── Hardening audit ──────────────────────────────────────────────────────────
+let lastAudit = null;
+async function smLoadAudit() {
+    $('sm-ring-score').textContent = 'scanning';
+    const node = ACTIVE_NODE;
+    $('sm-audit-sub').textContent = ACTIVE_NODE === 'all' ? 'Grade for every node, plus the Local node in detail' : 'Static analysis of nginx.conf, conf.d, snippets and enabled sites';
+    try {
+        const r = await fetch('/api/security/audit?node=' + encodeURIComponent(node));
+        const a = await r.json();
+        if (a.error) throw new Error(a.error);
+        lastAudit = a; renderAudit(a);
+    } catch (e) {
+        $('sm-checks').innerHTML = `<div class="text-sm" style="color:#fca5a5">Audit failed: ${esc(e.message)}</div>`;
+        $('sm-ring-score').textContent = 'error';
+    }
+}
+
+function renderAudit(a) {
+    const color = a.score >= 90 ? '#34d399' : a.score >= 80 ? '#a3e635' : a.score >= 65 ? '#facc15' : a.score >= 50 ? '#fb923c' : '#f87171';
+    $('sm-ring').style.stroke = color;
+    $('sm-ring').style.strokeDashoffset = (314.16 * (1 - a.score / 100)).toFixed(1);
+    $('sm-ring-grade').textContent = a.grade; $('sm-ring-grade').setAttribute('fill', color);
+    $('sm-ring-score').textContent = a.score + ' / 100';
+    $('kpi-grade').textContent = `${a.grade} · ${a.score}`; $('kpi-grade').style.color = color;
+    const s = a.summary || {};
+    $('kpi-grade-sub').textContent = `${s.fail||0} fail · ${s.warn||0} warn · ${s.pass||0} pass`;
+    $('sm-audit-summary').innerHTML = `<span style="color:#f87171">${s.fail||0} fail</span> · <span style="color:#facc15">${s.warn||0} warn</span> · <span style="color:#34d399">${s.pass||0} pass</span><br>${a.server_blocks} server blocks`;
+
+    const icon = { pass:['✓','#34d399'], fail:['✕','#f87171'], warn:['!','#facc15'], info:['i','#60a5fa'] };
+    $('sm-checks').innerHTML = a.checks.map(c => {
+        const [ic, col] = icon[c.status];
+        const linked = (CHECK_LOG_LINK[c.id] || []).reduce((n, id) => n + ((data?.categories || []).find(x => x.id === id)?.count || 0), 0);
+        const corr = c.status !== 'pass' && linked ? `<span class="chip" style="color:#fca5a5;border-color:rgba(248,113,113,.5)" title="Related attacks seen in the analysed logs">⚡ ${linked} related attacks in logs</span>` : '';
+        return `<details class="sm-check rounded-lg" style="background:#161b22;border:1px solid #21262d">
+            <summary class="flex items-center gap-3 px-3 py-2">
+                <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black flex-shrink-0" style="background:${col}22;color:${col};border:1px solid ${col}66">${ic}</span>
+                <span class="text-xs font-semibold sm-text flex-1 min-w-0 truncate">${esc(c.title)}</span>
+                ${corr}
+                ${c.status !== 'pass' ? sevBadge(c.severity) : ''}
+                ${c.affected.length ? `<span class="chip">${c.affected.length} affected</span>` : ''}
+                <span class="sm-caret sm-muted text-xs">▶</span>
+            </summary>
+            <div class="px-3 pb-3 pt-1 space-y-2">
+                <div class="text-xs" style="color:#8b949e">${esc(c.detail)}</div>
+                ${c.affected.length ? `<div class="flex flex-wrap gap-1">${c.affected.map(x => `<span class="chip font-mono">${esc(x)}</span>`).join('')}</div>` : ''}
+                ${c.recommendation && c.status !== 'pass' ? `<div class="relative"><pre class="sm-pre">${esc(c.recommendation)}</pre>
+                    <button class="sm-btn absolute top-1.5 right-1.5" style="padding:2px 8px;font-size:10px" onclick="smCopy(this.previousElementSibling.textContent, this)">Copy</button></div>` : ''}
+            </div>
+        </details>`;
+    }).join('');
+
+    if (a.fleet) {
+        const gradeColor = sc => sc == null ? '#8b949e' : sc >= 90 ? '#34d399' : sc >= 80 ? '#a3e635' : sc >= 65 ? '#facc15' : sc >= 50 ? '#fb923c' : '#f87171';
+        $('sm-checks').innerHTML = `
+            <div class="rounded-lg p-3" style="background:#161b22;border:1px solid #21262d">
+                <div class="text-[10px] font-bold tracking-widest sm-muted mb-2">FLEET HARDENING · click a node for its full report</div>
+                <div class="grid gap-2" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+                ${a.fleet.map(f => `
+                    <button class="text-left rounded-lg px-3 py-2 hover:brightness-125" style="background:#0d1117;border:1px solid ${gradeColor(f.score)}44"
+                            data-node="${esc(f.id)}" onclick="smSelectNode(this.dataset.node)">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-xs font-semibold sm-text truncate">${esc(f.name)}</span>
+                            <span class="font-mono font-black text-lg" style="color:${gradeColor(f.score)}">${f.error ? '—' : esc(f.grade)}</span>
+                        </div>
+                        <div class="text-[10px] ${f.error ? '' : 'sm-muted'}" style="${f.error ? 'color:#fca5a5' : ''}">${f.error ? 'audit failed' : `${f.score}/100 · ${f.fail} fail · ${f.warn} warn`}</div>
+                    </button>`).join('')}
+                </div>
+            </div>
+            <div class="text-[10px] font-bold tracking-widest sm-muted pt-2">DETAILED CHECKS · LOCAL</div>` + $('sm-checks').innerHTML;
+        const ok = a.fleet.filter(f => !f.error);
+        if (ok.length) {
+            const worst = ok.reduce((w, f) => f.score < w.score ? f : w);
+            $('kpi-grade').textContent = `${worst.grade} · ${worst.score}`;
+            $('kpi-grade').style.color = gradeColor(worst.score);
+            $('kpi-grade-sub').textContent = `worst: ${worst.name} · ${a.fleet.length} nodes`;
+        }
+    }
+
+    if (a.certificates === null) {
+        $('sm-certs').innerHTML = '<div class="text-xs sm-muted">Certificate expiry is checked for the Local node only.</div>';
+    } else if (!a.certificates.length) {
+        $('sm-certs').innerHTML = '<div class="text-xs sm-muted">No certificates found in the SSL directory.</div>';
+    } else {
+        $('sm-certs').innerHTML = a.certificates.map(c => {
+            const col = c.days_left < 0 ? '#f87171' : c.days_left < 14 ? '#f87171' : c.days_left < 30 ? '#facc15' : '#34d399';
+            return `<div class="flex items-center justify-between gap-2 rounded-lg px-3 py-2" style="background:#161b22">
+                <div class="min-w-0"><div class="text-xs font-mono sm-text truncate">${esc(c.cn || c.name)}</div><div class="text-[10px] sm-muted truncate">${esc(c.name)} · ${esc(c.expiry)}</div></div>
+                <span class="font-mono text-xs font-bold whitespace-nowrap" style="color:${col}">${c.days_left < 0 ? 'EXPIRED' : c.days_left + 'd'}</span></div>`;
+        }).join('');
+    }
+}
+
+async function smLoadAppAudit() {
+    if (!IS_ADMIN) return;
+    try {
+        const a = await (await fetch('/api/security/app-audit')).json();
+        if (a.error) throw new Error(a.error);
+        const col = { pass:'#34d399', fail:'#f87171' };
+        $('sm-app').innerHTML = a.checks.map(c => `
+            <div class="rounded-lg px-3 py-2" style="background:#161b22;border-left:3px solid ${c.status === 'pass' ? col.pass : SEV_COLOR[c.severity]}">
+                <div class="flex items-center justify-between gap-2"><span class="text-xs font-bold sm-text">${esc(c.title)}</span>
+                    ${c.status === 'pass' ? '<span class="text-[10px] font-bold" style="color:#34d399">OK</span>' : sevBadge(c.severity)}</div>
+                <div class="text-[11px] sm-muted">${esc(c.detail)}</div>
+                ${c.status !== 'pass' && c.recommendation ? `<div class="text-[11px] font-mono mt-1" style="color:#a5d6ff">${esc(c.recommendation)}</div>` : ''}
+            </div>`).join('') +
+            `<div class="text-[11px] sm-muted px-1 pt-1">Last 24h: <span style="color:#34d399">${a.successful_logins_24h} ok</span> · <span style="color:#f87171">${a.failed_logins_24h} failed</span> logins
+             ${a.failed_by_ip.length ? '<br>Top failing IPs: ' + a.failed_by_ip.slice(0,5).map(x => `<span class="font-mono sm-text">${esc(x.ip)}</span>×${x.count}`).join(', ') : ''}</div>`;
+    } catch (e) {
+        $('sm-app').innerHTML = `<div class="text-xs" style="color:#fca5a5">${esc(e.message)}</div>`;
+    }
+}
+
+// ── Blocklist ────────────────────────────────────────────────────────────────
+const IP_RE = /^(\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?|[0-9a-fA-F:]+(\/\d{1,3})?)$/;
+function smToggleBlock(ip, on) { on ? blocklist.add(ip) : blocklist.delete(ip); smUpdateBlocklist(); }
+function smOpenBlocklist() { smUpdateBlocklist(); $('sm-bl-modal').classList.remove('hidden'); }
+function smCloseBlocklist() { $('sm-bl-modal').classList.add('hidden'); }
+function smBlClear() { blocklist.clear(); smUpdateBlocklist(); if (data) renderAttackers(data.attackers); }
+function smBlAddManual() {
+    const v = $('sm-bl-add').value.trim();
+    if (!IP_RE.test(v)) { $('sm-bl-add').style.borderColor = '#f87171'; return; }
+    $('sm-bl-add').style.borderColor = ''; $('sm-bl-add').value = '';
+    blocklist.add(v); smUpdateBlocklist();
+}
+function smBlAddHighRisk() {
+    (data?.attackers || []).filter(a => (a.risk === 'high' || a.risk === 'critical') && !a.internal).forEach(a => blocklist.add(a.ip));
+    smUpdateBlocklist(); if (data) renderAttackers(data.attackers);
+}
+function smUpdateBlocklist() {
+    $('sm-bl-count').textContent = blocklist.size;
+    const ips = [...blocklist];
+    const byIp = Object.fromEntries((data?.attackers || []).map(a => [a.ip, a]));
+    const internal = ips.filter(ip => byIp[ip]?.internal || /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip));
+    $('sm-bl-warn').classList.toggle('hidden', !internal.length);
+    $('sm-bl-warn').textContent = internal.length ? `⚠ Internal/private addresses selected (${internal.join(', ')}). If nginx sits behind a proxy or load balancer, these may be your own infrastructure.` : '';
+    const lines = ips.map(ip => {
+        const a = byIp[ip];
+        const note = a ? `  # risk ${a.score} ${a.risk}: ${a.categories.slice(0,3).map(catLabel).join(', ')}` : '';
+        return `deny ${ip};${note}`;
+    });
+    $('sm-bl-out').textContent = ips.length
+        ? `# Generated by Nginx UI Security Monitor — ${new Date().toISOString()}\n${lines.join('\n')}\n`
+        : '# Select IPs in the attacker table, or add them above.';
+}
+
+// ── Live socket ──────────────────────────────────────────────────────────────
+function wsUrl() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${location.host}/ws/security?node=${encodeURIComponent(ACTIVE_NODE)}&lines=${$('sm-lines').value}`;
+}
+function closeSocket() {
+    clearTimeout(wsTimer);
+    if (ws) { ws.onclose = null; ws.onerror = null; ws.close(); ws = null; }
+}
+function scheduleReconnect() {
+    if (paused) return;
+    clearTimeout(wsTimer);
+    wsTimer = setTimeout(() => { wsDelay = Math.min(wsDelay * 1.6, 15000); connectSocket(); }, wsDelay);
+}
+function connectSocket() {
+    if (paused) return;
+    let s;
+    try { s = new WebSocket(wsUrl()); } catch (e) { scheduleReconnect(); return; }
+    ws = s;
+    s.onopen = () => { wsDelay = 1000; $('sm-live-label').textContent = 'LIVE'; };
+    s.onmessage = evt => { let d; try { d = JSON.parse(evt.data); } catch (e) { return; } render(d); };
+    s.onclose = evt => {
+        if (ws !== s) return;
+        ws = null;
+        if (evt.code === 4401) { location.href = '/login'; return; }
+        $('sm-live-label').textContent = 'RECONNECTING';
+        $('sm-updated').textContent = 'Connection lost — retrying…'; $('sm-updated').style.color = '#f87171';
+        scheduleReconnect();
+    };
+    s.onerror = () => s.close();
+}
+function smReconnect() { closeSocket(); firstRender = true; seenEvents.clear(); connectSocket(); }
+function smTogglePause() {
+    paused = !paused;
+    $('sm-pause').textContent = paused ? 'Resume' : 'Pause';
+    $('sm-live-label').textContent = paused ? 'PAUSED' : 'LIVE';
+    $('sm-live-dot').classList.toggle('sm-live-dot', !paused);
+    paused ? closeSocket() : connectSocket();
+}
+function smSelectNode(id) {
+    ACTIVE_NODE = id;
+    document.querySelectorAll('.sm-node-tab').forEach(b => b.classList.toggle('active', b.dataset.node === id));
+    const name = id === 'all' ? 'All Nodes' : id === 'local' ? '' : (NODES.find(n => n.id === id)?.name || '');
+    $('page-title-text').textContent = 'Cyber Security Monitor' + (name ? ' — ' + name : '');
+    $('sm-tv-scope').textContent = id === 'all' ? 'All nodes (fleet)' : id === 'local' ? 'Local node' : name;
+    $('sm-fs-scope').textContent = $('sm-tv-scope').textContent.toUpperCase();
+    if (!TV_MODE) $('sm-tv-btn').href = '/security?tv=1&node=' + encodeURIComponent(id);
+    $('sm-nodes-panel').classList.toggle('hidden', id !== 'all');
+    ipFilter = ''; data = null; tickerSeen.clear();
+    if (mapReady) SecMap.resetLive();
+    smReconnect(); smLoadAudit();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') smCloseBlocklist(); });
+$('sm-bl-modal').addEventListener('click', e => { if (e.target.id === 'sm-bl-modal') smCloseBlocklist(); });
+$('sm-bl-add').addEventListener('keydown', e => { if (e.key === 'Enter') smBlAddManual(); });
+
+// ── Display modes: full screen + TV/kiosk ────────────────────────────────────
+const TV_MODE = new URLSearchParams(location.search).has('tv');
+const smRoot = $('sm-root');
+function isFs() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function smToggleFullscreen() {
+    const req = isFs()
+        ? (document.exitFullscreen || document.webkitExitFullscreen)
+        : (smRoot.requestFullscreen || smRoot.webkitRequestFullscreen);
+    if (!req) { location.href = '/security?tv=1'; return; }   // no Fullscreen API → TV layout
+    const p = req.call(isFs() ? document : smRoot);
+    // Browsers refuse full screen without a user gesture (or in some kiosk /
+    // embedded contexts); don't surface that as an uncaught error.
+    if (p && p.catch) p.catch(err => {
+        $('sm-updated').textContent = 'Full screen blocked by browser — use TV mode or F11';
+        $('sm-updated').style.color = '#facc15';
+        console.warn('Fullscreen refused:', err);
+    });
+}
+function smSyncDisplay() {
+    const fs = (document.fullscreenElement || document.webkitFullscreenElement) === smRoot;
+    smRoot.classList.toggle('sm-display', fs || TV_MODE);
+    $('sm-fs-label').textContent = fs ? 'Exit full screen' : 'Full screen';
+    $('sm-fs-icon').innerHTML = fs
+        ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>'
+        : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>';
+    setTimeout(() => { if (data) renderTimeline(data.timeline, data.timeline_bucket_seconds); }, 150);
+}
+document.addEventListener('fullscreenchange', smSyncDisplay);
+document.addEventListener('webkitfullscreenchange', smSyncDisplay);
+if (TV_MODE) {
+    document.documentElement.classList.add('sm-tv');
+    $('sm-tv-btn').href = '/security'; $('sm-tv-btn').target = '_self';
+    $('sm-tv-label').textContent = 'Exit TV mode';
+}
+smSyncDisplay();
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'f' && e.key !== 'F') return;
+    if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName)) return;
+    smToggleFullscreen();
+});
+
+let idleTimer = null;
+document.addEventListener('mousemove', () => {
+    smRoot.classList.remove('sm-idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => smRoot.classList.add('sm-idle'), 3000);
+});
+
+function smTick() {
+    const d = new Date();
+    $('sm-fs-clock').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    $('sm-laos-fs-clock').textContent = $('sm-fs-clock').textContent;
+    $('sm-clock').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    $('sm-date').textContent = d.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+setInterval(smTick, 1000); smTick();
+renderGauge();
+
+SecMap.init($('sm-map'), { onSelect: ip => smFilterIp(ip), catLabel })
+    .then(() => {
+        mapReady = true;
+        $('sm-map').addEventListener('dblclick', () => { if (!mapFsOn()) smMapFullscreen(); });
+        if (VIEW === 'map') smPanelPseudo('world', true); else smSyncPanels();
+        if (data) renderGeo(data);
+    })
+    .catch(e => console.error('Threat map failed to load', e));
+
+LaosMap.init($('sm-laos'), { onSelect: iso => { laosSel = iso; smMarkLaoRows(true); } })
+    .then(attribution => {
+        laosReady = true;
+        $('sm-lao-attrib').textContent = attribution;
+        $('sm-laos').addEventListener('dblclick', () => { if (!panelFsOn('laos')) smPanelFullscreen('laos'); });
+        if (VIEW === 'laos') smPanelPseudo('laos', true); else smSyncPanels();
+        if (data) renderLaos(data);
+    })
+    .catch(e => console.error('Laos map failed to load', e));
+
+// ?node=all | local | <node id> | <node name>  (for kiosk / bookmark URLs)
+const URL_NODE = new URLSearchParams(location.search).get('node');
+if (URL_NODE) {
+    const u = URL_NODE.toLowerCase(), m = NODES.find(n => n.id === URL_NODE || n.name.toLowerCase() === u);
+    ACTIVE_NODE = (u === 'all' || u === 'local') ? u : m ? m.id : ACTIVE_NODE;
+}
+if (!['local', 'all'].includes(ACTIVE_NODE) && !NODES.some(n => n.id === ACTIVE_NODE)) ACTIVE_NODE = 'local';
+smSelectNode(ACTIVE_NODE);
+smLoadAppAudit();
+</script>
+{% endblock %}

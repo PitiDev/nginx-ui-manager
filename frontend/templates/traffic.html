@@ -356,7 +356,10 @@ const LANE_COLOR = { 2:'#34d399', 3:'#60a5fa', 4:'#fbbf24', 5:'#f87171' };
 
 let seenRaw = new Set();
 let paused = false;
-let pollTimer = null;
+let ws = null;
+let wsReconnectTimer = null;
+let wsReconnectDelay = 1000;
+const WS_MAX_RECONNECT_DELAY = 15000;
 let backendMap = {};        // target -> {pathId, idx}
 let backendSignature = '';  // detects when the set of proxy_pass targets changes
 let chartDisplay = new Array(30).fill(0);
@@ -962,39 +965,72 @@ function applyStats(stats) {
     }
 }
 
-// ── Polling ───────────────────────────────────────────────────────────────────
-function statsUrl() {
+// ── Live socket ───────────────────────────────────────────────────────────────
+// Server pushes stats on its own interval (2s / 6s for "all") over a single
+// persistent connection, instead of the client fetch-polling on a timer.
+function wsUrl() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const lines = $('tm-lines').value;
-    if (ACTIVE_NODE === 'all')   return `/api/traffic/all?lines=${lines}`;
-    if (ACTIVE_NODE !== 'local') return `/api/nodes/${ACTIVE_NODE}/traffic?lines=${lines}`;
-    return `/api/traffic/stats?lines=${lines}`;
+    return `${proto}//${location.host}/ws/traffic?node=${encodeURIComponent(ACTIVE_NODE)}&lines=${lines}`;
 }
 
-// "All Nodes" fans out over SSH to every configured node on each poll —
-// back off the interval so a large fleet doesn't get hammered every 2s.
-function pollIntervalMs() {
-    return ACTIVE_NODE === 'all' ? 6000 : 2000;
-}
-
-async function poll() {
-    if (paused) return;
-    try {
-        const res = await fetch(statsUrl());
-        const stats = await res.json();
-        applyStats(stats);
-    } catch (e) {
-        hideFlowLoading();
-        $('tm-updated').textContent = 'Connection error: ' + e.message;
-        $('tm-updated').style.color = '#f87171';
+function closeSocket() {
+    clearTimeout(wsReconnectTimer);
+    if (ws) {
+        ws.onclose = null;  // this is an intentional close — don't reconnect for it
+        ws.onerror = null;
+        ws.close();
+        ws = null;
     }
 }
 
-function scheduleNextPoll() {
-    clearTimeout(pollTimer);
-    pollTimer = setTimeout(async () => { await poll(); scheduleNextPoll(); }, pollIntervalMs());
+function scheduleReconnect() {
+    if (paused) return;
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = setTimeout(() => {
+        wsReconnectDelay = Math.min(wsReconnectDelay * 1.6, WS_MAX_RECONNECT_DELAY);
+        connectSocket();
+    }, wsReconnectDelay);
 }
 
-function tmSetLines() { seenRaw.clear(); poll(); }
+function connectSocket() {
+    if (paused) return;
+    clearTimeout(wsReconnectTimer);
+
+    let socket;
+    try {
+        socket = new WebSocket(wsUrl());
+    } catch (e) {
+        scheduleReconnect();
+        return;
+    }
+    ws = socket;
+
+    socket.onopen = () => {
+        wsReconnectDelay = 1000;
+        $('tm-live-label').textContent = paused ? 'PAUSED' : 'LIVE';
+    };
+    socket.onmessage = (evt) => {
+        let stats;
+        try { stats = JSON.parse(evt.data); } catch (e) { return; }
+        applyStats(stats);
+    };
+    socket.onclose = (evt) => {
+        if (ws !== socket) return;  // superseded by a newer connection already
+        ws = null;
+        if (evt.code === 4401) {
+            window.location.href = '/login';
+            return;
+        }
+        hideFlowLoading();
+        $('tm-updated').textContent = 'Reconnecting…';
+        $('tm-updated').style.color = '#f87171';
+        scheduleReconnect();
+    };
+    socket.onerror = () => { socket.close(); };
+}
+
+function tmSetLines() { seenRaw.clear(); closeSocket(); connectSocket(); }
 
 // ── Node tabs ────────────────────────────────────────────────────────────────
 function tmUpdateNodeTabStyles() {
@@ -1070,8 +1106,8 @@ function tmSelectNode(id) {
 
     tmUpdateNodeTabStyles();
     tmUpdatePageTitle();
-    scheduleNextPoll();
-    poll();
+    closeSocket();
+    connectSocket();
 }
 
 function tmPingNodeTab(id) {
@@ -1089,7 +1125,11 @@ function tmTogglePause() {
     $('tm-live-label').textContent = paused ? 'PAUSED' : 'LIVE';
     $('tm-live-dot').style.animationPlayState = paused ? 'paused' : 'running';
     $('tm-live-dot').style.background = paused ? '#6e7681' : '';
-    if (!paused) poll();
+    if (paused) {
+        closeSocket();
+    } else {
+        connectSocket();
+    }
 }
 
 // ── Fullscreen ────────────────────────────────────────────────────────────────
@@ -1145,7 +1185,6 @@ window.addEventListener('resize', drawChart);
 tmUpdateNodeTabStyles();
 tmUpdatePageTitle();
 ALL_NODES.forEach(n => tmPingNodeTab(n.id));
-scheduleNextPoll();
-poll();
+connectSocket();
 </script>
 {% endblock %}

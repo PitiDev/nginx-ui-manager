@@ -1,13 +1,14 @@
+import asyncio
 import re
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from backend import activity, auth, backup, logs, nginx, node_ssh, nodes as node_store, proxy_mgr, ssl_mgr, system, tester, traffic
+from backend import activity, auth, backup, logs, nginx, node_ssh, nodes as node_store, proxy_mgr, security, ssl_mgr, system, system_diagram, tester, traffic
 from backend import users as user_store
 
 app = FastAPI(title="Nginx UI")
@@ -408,6 +409,54 @@ def api_traffic_all(lines: int = 4000):
     return JSONResponse(traffic.get_fleet_stats(min(lines, 4000)))
 
 
+def _traffic_stats_for(node_id: str, lines: int) -> dict:
+    if node_id == "all":
+        return traffic.get_fleet_stats(lines)
+    if node_id != "local":
+        node = node_store.get_node(node_id)
+        if not node:
+            return {"error": "Node not found"}
+        return traffic.get_node_stats(node, lines)
+    return traffic.get_local_stats(lines)
+
+
+@app.websocket("/ws/traffic")
+async def ws_traffic(websocket: WebSocket):
+    """Pushes Traffic Monitor stats (incl. the Live Request Flow diagram's
+    upstream breakdown) to the client on a server-driven interval, replacing
+    client-side fetch polling with a persistent connection.
+
+    BaseHTTPMiddleware (AuthMiddleware) only wraps the HTTP scope, not
+    websocket connections, so the session cookie has to be checked here too.
+    """
+    user = auth.verify_token(websocket.cookies.get("access_token"))
+    # Accept before closing on auth failure: a close() sent before accept()
+    # gets flattened into a bare HTTP 403 at the handshake, and the custom
+    # 4401 code never reaches the browser's onclose handler.
+    await websocket.accept()
+    if not user:
+        await websocket.close(code=4401)
+        return
+
+    node_id = websocket.query_params.get("node", "local")
+    raw_lines = websocket.query_params.get("lines")
+    try:
+        lines = min(max(int(raw_lines), 100), 8000) if raw_lines else 4000
+    except ValueError:
+        lines = 4000
+
+    try:
+        while True:
+            try:
+                stats = await asyncio.to_thread(_traffic_stats_for, node_id, lines)
+            except Exception as e:
+                stats = {"error": str(e)}
+            await websocket.send_json(stats)
+            await asyncio.sleep(6 if node_id == "all" else 2)
+    except WebSocketDisconnect:
+        pass
+
+
 # ── Logs Page ─────────────────────────────────────────────────────────────────
 
 @app.get("/logs", response_class=HTMLResponse)
@@ -422,11 +471,107 @@ async def traffic_page(request: Request):
     return tmpl(request, "traffic.html", {"flash_msg": "", "flash_cat": ""})
 
 
+# ── Cyber Security Monitor ────────────────────────────────────────────────────
+
+@app.get("/security", response_class=HTMLResponse)
+async def security_page(request: Request):
+    return tmpl(request, "security.html", {"flash_msg": "", "flash_cat": ""})
+
+
+def _security_lines(raw) -> int:
+    try:
+        return min(max(int(raw), 200), 20000)
+    except (TypeError, ValueError):
+        return 5000
+
+
+@app.get("/api/security/overview")
+def api_security_overview(node: str = "local", lines: int = 5000):
+    try:
+        return JSONResponse(security.get_overview(node, _security_lines(lines)))
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@app.get("/api/security/audit")
+def api_security_audit(node: str = "local"):
+    if node == "all":
+        return JSONResponse(security.get_fleet_audit())
+    return JSONResponse(security.get_audit(node))
+
+
+@app.get("/api/security/app-audit")
+def api_security_app_audit(request: Request):
+    # Exposes login IPs/usernames from the activity log → admin only.
+    if getattr(request.state, "user", {}).get("role") != "admin":
+        return JSONResponse({"error": "admin only"}, status_code=403)
+    return JSONResponse(security.app_audit())
+
+
+@app.websocket("/ws/security")
+async def ws_security(websocket: WebSocket):
+    """Live threat feed. Same auth pattern as /ws/traffic (the HTTP auth
+    middleware doesn't cover websocket scope)."""
+    user = auth.verify_token(websocket.cookies.get("access_token"))
+    await websocket.accept()
+    if not user:
+        await websocket.close(code=4401)
+        return
+
+    node_id = websocket.query_params.get("node", "local")
+    lines = _security_lines(websocket.query_params.get("lines"))
+    interval = 5 if node_id == "local" else 15 if node_id == "all" else 10
+
+    try:
+        while True:
+            try:
+                data = await asyncio.to_thread(security.get_overview, node_id, lines)
+            except Exception as e:
+                data = {"error": str(e)}
+            await websocket.send_json(data)
+            await asyncio.sleep(interval)
+    except WebSocketDisconnect:
+        pass
+
+
 # ── About ─────────────────────────────────────────────────────────────────────
 
 @app.get("/about", response_class=HTMLResponse)
 async def about_page(request: Request):
     return tmpl(request, "about.html")
+
+
+# ── System Diagram ────────────────────────────────────────────────────────────
+
+@app.get("/system-diagram", response_class=HTMLResponse)
+async def system_diagram_page(request: Request):
+    ctx = {
+        "embed_url": system_diagram.get_embed_url(),
+        **_flash_ctx(request),
+    }
+    response = tmpl(request, "system_diagram.html", ctx)
+    _clear_flash(response)
+    return response
+
+
+@app.post("/system-diagram/save")
+async def system_diagram_save(request: Request, embed_code: str = Form(...)):
+    ok, msg = system_diagram.set_embed_url(embed_code)
+    user, role = _actor(request)
+    activity.log(user, role, "system_diagram.save", detail=msg, ip=_get_ip(request), result="success" if ok else "error")
+    response = RedirectResponse(url="/system-diagram", status_code=302)
+    _set_flash(response, msg, "success" if ok else "error")
+    return response
+
+
+@app.post("/system-diagram/clear")
+async def system_diagram_clear(request: Request):
+    system_diagram.clear_embed()
+    user, role = _actor(request)
+    activity.log(user, role, "system_diagram.clear", ip=_get_ip(request))
+    response = RedirectResponse(url="/system-diagram", status_code=302)
+    _set_flash(response, "Diagram embed removed", "info")
+    return response
 
 
 # ── SSL Manager ───────────────────────────────────────────────────────────────
@@ -869,6 +1014,65 @@ async def node_disable_site(request: Request, node_id: str, name: str):
     return response
 
 
+@app.get("/nodes/{node_id}/configs/new", response_class=HTMLResponse)
+async def node_new_config_page(request: Request, node_id: str):
+    node = node_store.get_node(node_id)
+    if not node:
+        response = RedirectResponse(url="/nodes", status_code=302)
+        _set_flash(response, "Node not found", "error")
+        return response
+    return tmpl(request, "node_config_editor.html", {
+        "node": node,
+        "mode": "new",
+        "name": "",
+        "content": DEFAULT_CONFIG_TEMPLATE,
+        "enabled": True,
+        "error": "",
+        "output": "",
+    })
+
+
+@app.post("/nodes/{node_id}/configs/create")
+async def node_config_create(
+    request: Request,
+    node_id: str,
+    name:    str = Form(...),
+    content: str = Form(...),
+):
+    node = node_store.get_node(node_id)
+    if not node:
+        response = RedirectResponse(url="/nodes", status_code=302)
+        _set_flash(response, "Node not found", "error")
+        return response
+    name = name.strip()
+    if not name or "/" in name or name.startswith("."):
+        return tmpl(request, "node_config_editor.html", {
+            "node": node,
+            "mode": "new",
+            "name": name,
+            "content": content,
+            "enabled": True,
+            "error": "Invalid config name. Must not contain '/' or start with '.'",
+            "output": "",
+        })
+    ok, msg = node_ssh.save_config(node, name, content)
+    user, role = _actor(request)
+    activity.log(user, role, "config.create", target=name, detail=msg, ip=_get_ip(request), result="success" if ok else "error", node=node["name"])
+    if not ok:
+        return tmpl(request, "node_config_editor.html", {
+            "node": node,
+            "mode": "new",
+            "name": name,
+            "content": content,
+            "enabled": True,
+            "error": msg,
+            "output": "",
+        })
+    response = RedirectResponse(url=f"/nodes/{node_id}", status_code=302)
+    _set_flash(response, f"Config '{name}' created on {node['name']}", "success")
+    return response
+
+
 @app.get("/nodes/{node_id}/configs/{name}", response_class=HTMLResponse)
 async def node_config_editor(request: Request, node_id: str, name: str):
     node = node_store.get_node(node_id)
@@ -879,6 +1083,7 @@ async def node_config_editor(request: Request, node_id: str, name: str):
     ok, content = node_ssh.get_config(node, name)
     return tmpl(request, "node_config_editor.html", {
         "node": node,
+        "mode": "edit",
         "name": name,
         "content": content if ok else "",
         "enabled": node_ssh.is_enabled(node, name) if ok else True,
@@ -904,6 +1109,7 @@ async def node_config_save(
     activity.log(user, role, "config.save", target=name, detail=msg, ip=_get_ip(request), result="success" if ok else "error", node=node["name"])
     return tmpl(request, "node_config_editor.html", {
         "node": node,
+        "mode": "edit",
         "name": name,
         "content": content,
         "enabled": node_ssh.is_enabled(node, name),
@@ -1028,17 +1234,7 @@ def api_node_traffic(node_id: str, lines: int = 4000):
     node = node_store.get_node(node_id)
     if not node:
         return JSONResponse({"error": "Node not found"})
-    entries = node_ssh.get_remote_logs(node, "access", min(lines, 8000))
-    proxies = node_ssh.list_remote_proxies(node)
-    stats = traffic.compute_stats(entries, proxies)
-    try:
-        remote = node_ssh.get_remote_stats(node)
-        stats["cpu_percent"] = remote.get("cpu", {}).get("percent")
-        stats["ram_percent"] = remote.get("memory", {}).get("percent")
-    except Exception:
-        stats["cpu_percent"] = None
-        stats["ram_percent"] = None
-    return JSONResponse(stats)
+    return JSONResponse(traffic.get_node_stats(node, min(lines, 8000)))
 
 
 @app.get("/api/nodes/{node_id}/ssl")

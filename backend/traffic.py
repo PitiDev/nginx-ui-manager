@@ -117,29 +117,38 @@ def compute_stats(entries: list, proxies: list | None = None,
 
     flat_upstreams = _flatten_upstreams(proxies)
     upstream_counts = Counter()
-    ambiguous_targets = set()
+    ambiguous_keys = set()
+
+    def _key(u):
+        return (u["site"], u["path"], u["target"])
+
     for e in parsed:
         candidates = _match_candidates(e.get("path", "/"), flat_upstreams)
         u = _pick_upstream(e, candidates)
         e["upstream_target"] = u["target"] if u else None
         e["upstream_path"] = u["path"] if u else None
         e["upstream_shared"] = len(candidates) > 1
-        upstream_counts[u["target"] if u else None] += 1
+        upstream_counts[_key(u) if u else None] += 1
         if len(candidates) > 1:
-            ambiguous_targets.update(c["target"] for c in candidates)
+            ambiguous_keys.update(_key(c) for c in candidates)
 
+    # Dedup by (site, path, target) rather than target alone — many sites
+    # legitimately proxy the same location to the same backend (e.g. several
+    # domains sharing one app server), and deduping on target would silently
+    # collapse those distinct site→route mappings down to a single node.
     upstream_summary = []
-    seen_targets = set()
+    seen_keys = set()
     for u in flat_upstreams:
-        if u["target"] in seen_targets:
+        key = _key(u)
+        if key in seen_keys:
             continue
-        seen_targets.add(u["target"])
+        seen_keys.add(key)
         upstream_summary.append({
             "target": u["target"],
             "path": u["path"],
             "site": u["site"],
-            "count": upstream_counts.get(u["target"], 0),
-            "ambiguous": u["target"] in ambiguous_targets,
+            "count": upstream_counts.get(key, 0),
+            "ambiguous": key in ambiguous_keys,
         })
 
     now = datetime.now(timezone.utc)
@@ -193,6 +202,23 @@ def compute_stats(entries: list, proxies: list | None = None,
         "recent": recent,
         "upstreams": upstream_summary,
     }
+
+
+def get_node_stats(node: dict, lines: int = 4000) -> dict:
+    """Same shape as get_local_stats(), but for one remote node reached over SSH."""
+    from backend import node_ssh
+
+    entries = node_ssh.get_remote_logs(node, "access", min(lines, 8000))
+    proxies = node_ssh.list_remote_proxies(node)
+    stats = compute_stats(entries, proxies)
+    try:
+        remote = node_ssh.get_remote_stats(node)
+        stats["cpu_percent"] = remote.get("cpu", {}).get("percent")
+        stats["ram_percent"] = remote.get("memory", {}).get("percent")
+    except Exception:
+        stats["cpu_percent"] = None
+        stats["ram_percent"] = None
+    return stats
 
 
 def get_local_stats(lines: int = 4000) -> dict:

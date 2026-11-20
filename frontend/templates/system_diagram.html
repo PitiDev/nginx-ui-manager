@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}System Diagram — Nginx UI{% endblock %}
+{% block page_title %}System Diagram{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+    <p class="text-sm text-gray-500">Embed a Whimsical (or other) diagram so the team always has an up-to-date view of the system architecture.</p>
+    {% if embed_url and current_user and current_user.role == 'admin' %}
+    <div class="flex items-center gap-2">
+        <button type="button" onclick="toggleEditor(true)"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-600 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors">
+            Replace Embed
+        </button>
+        <form method="post" action="/system-diagram/clear"
+              onsubmit="return confirm('Remove the diagram embed?')">
+            <button type="submit"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 text-sm font-medium rounded-md hover:bg-red-100 transition-colors">
+                Remove
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+{% if embed_url %}
+<div id="diagram-view" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <iframe style="border:none; width:100%; height:calc(100vh - 220px); min-height:450px;"
+            src="{{ embed_url }}"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
+</div>
+{% endif %}
+
+<div id="diagram-editor" class="bg-white rounded-xl border border-gray-200 shadow-sm {% if embed_url %}p-8 mt-4 hidden{% else %}p-16 text-center{% endif %}">
+    {% if not embed_url %}
+    <svg class="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10-3a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1v-7z"/>
+    </svg>
+    <p class="text-gray-500 text-sm mb-1">No diagram added yet</p>
+    <p class="text-gray-400 text-xs mb-6">Paste a Whimsical embed snippet below to show it here for everyone.</p>
+    {% endif %}
+
+    {% if current_user and current_user.role == 'admin' %}
+    <form method="post" action="/system-diagram/save" class="{% if not embed_url %}text-left max-w-2xl mx-auto{% endif %}">
+        <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Embed Code</label>
+        <textarea name="embed_code" rows="4" required
+                  placeholder='&lt;iframe style="border:none" width="800" height="450" src="https://whimsical.com/embed/&lt;your-diagram-id&gt;?color-mode=system"&gt;&lt;/iframe&gt;'
+                  class="w-full px-3 py-2.5 text-xs font-mono border border-gray-200 rounded-xl focus:ring-2 focus:ring-nginx focus:border-transparent focus:outline-none bg-gray-50 focus:bg-white transition-colors"></textarea>
+        <p class="text-xs text-gray-400 mt-1.5">Paste the full &lt;iframe&gt; snippet from Whimsical's Share → Embed dialog, or just the https:// URL.</p>
+        <div class="flex items-center gap-2 mt-3 {% if not embed_url %}justify-start{% else %}justify-end{% endif %}">
+            {% if embed_url %}
+            <button type="button" onclick="toggleEditor(false)"
+                    class="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">
+                Cancel
+            </button>
+            {% endif %}
+            <button type="submit"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-nginx text-white text-sm font-medium rounded-md hover:bg-nginx-dark transition-colors">
+                Save Diagram
+            </button>
+        </div>
+    </form>
+    {% else %}
+    <p class="text-gray-400 text-sm">Ask an admin to add a diagram embed here.</p>
+    {% endif %}
+</div>
+
+<script>
+function toggleEditor(show) {
+    document.getElementById('diagram-editor').classList.toggle('hidden', !show);
+}
+</script>
+{% endblock %}

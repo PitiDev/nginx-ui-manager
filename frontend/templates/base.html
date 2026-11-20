@@ -200,6 +200,22 @@
                 {% endif %}
             </a>
 
+            <a href="/security"
+               class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150
+               {% if request.url.path == '/security' %}bg-slate-700 text-white shadow-sm{% else %}text-slate-400 hover:bg-slate-800 hover:text-white{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4m0 3h.01"/>
+                </svg>
+                <span>Security Monitor</span>
+                {% if request.url.path == '/security' %}
+                <span class="ml-auto w-1.5 h-1.5 rounded-full bg-nginx"></span>
+                {% else %}
+                <span class="ml-auto w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                {% endif %}
+            </a>
+
             <a href="/testing"
                class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150
                {% if request.url.path == '/testing' %}bg-slate-700 text-white shadow-sm{% else %}text-slate-400 hover:bg-slate-800 hover:text-white{% endif %}">
@@ -252,6 +268,19 @@
                 {% endif %}
             </a>
             {% endif %}
+
+            <a href="/system-diagram"
+               class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150
+               {% if request.url.path == '/system-diagram' %}bg-slate-700 text-white shadow-sm{% else %}text-slate-400 hover:bg-slate-800 hover:text-white{% endif %}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                          d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0H5a2 2 0 01-2-2v-4m6 6h10a2 2 0 002-2v-4m0-6h.01M3 9h.01"/>
+                </svg>
+                <span>System Diagram</span>
+                {% if request.url.path == '/system-diagram' %}
+                <span class="ml-auto w-1.5 h-1.5 rounded-full bg-nginx"></span>
+                {% endif %}
+            </a>
         </nav>
 
         <!-- ── Active Node Selector ──────────────────────────────────────── -->
