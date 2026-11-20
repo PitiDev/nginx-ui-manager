@@ -493,6 +493,21 @@ def api_security_overview(node: str = "local", lines: int = 5000):
         return JSONResponse({"error": str(e)}, status_code=404)
 
 
+@app.get("/api/security/ip")
+def api_security_ip(ip: str, node: str = "local", lines: int = 20000):
+    """Everything one source IP did in the logs (IP investigation drawer)."""
+    try:
+        depth = min(max(int(lines), 200), 50000)
+    except (TypeError, ValueError):
+        depth = 20000
+    try:
+        return JSONResponse(security.investigate(ip, node, depth))
+    except ValueError as e:
+        msg = str(e)
+        return JSONResponse({"error": msg if msg == "Node not found" else "Invalid IP address"},
+                            status_code=404 if msg == "Node not found" else 400)
+
+
 @app.get("/api/security/audit")
 def api_security_audit(node: str = "local"):
     if node == "all":

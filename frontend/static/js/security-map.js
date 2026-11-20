@@ -252,7 +252,7 @@
                 <span style="color:#8b949e">Threat hits</span><span class="text-white">${p.hits.toLocaleString()}</span>
                 <span style="color:#8b949e">Risk score</span><span class="text-white">${p.score}</span></div>
             <div class="flex flex-wrap gap-1 mt-1.5">${(p.cats || []).map(c => `<span class="chip">${esc(opts.catLabel(c))}</span>`).join('')}</div>
-            <div class="text-[10px] mt-1.5" style="color:#6e7681">Click to filter events by ${esc(p.top_ip)}</div>`;
+            <div class="text-[10px] mt-1.5" style="color:#6e7681">Click to investigate ${esc(p.top_ip)}</div>`;
         tip.classList.remove('hidden');
         moveTip(ev);
     }

@@ -150,6 +150,35 @@
     .sm-pt:hover circle:last-child { stroke:#fff; stroke-width:1.5; }
     @keyframes sm-tick-in { from { opacity:0; transform:translateX(-8px); background:rgba(248,113,113,.15); } to { opacity:1; transform:none; } }
     .sm-tick-in { animation:sm-tick-in .5s ease-out; }
+
+    /* ── IP investigation drawer ─────────────────────────────────────────── */
+    #sm-ip-drawer { position:fixed; inset:0; z-index:80; color:#c9d1d9; }
+    #sm-ip-drawer .sm-ip-bg { position:absolute; inset:0; background:rgba(1,4,9,.72); backdrop-filter:blur(2px); }
+    #sm-ip-drawer .sm-ip-panel { position:absolute; top:0; right:0; bottom:0; width:min(1200px,100vw); background:#0b0f14;
+        border-left:1px solid #30363d; box-shadow:-24px 0 60px rgba(0,0,0,.55); overflow-y:auto; animation:sm-ip-in .22s ease-out; }
+    @keyframes sm-ip-in { from { transform:translateX(40px); opacity:0; } to { transform:none; opacity:1; } }
+    .sm-ip-head { position:sticky; top:0; z-index:5; background:rgba(11,15,20,.96); backdrop-filter:blur(6px); border-bottom:1px solid #21262d; }
+    .sm-ip-sec { background:#0d1117; border:1px solid #21262d; border-radius:14px; }
+    .sm-ip-sec > h3 { font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#8b949e; padding:12px 16px 0; display:flex; align-items:center; gap:8px; }
+    .sm-ip-kpi { background:#0d1117; border:1px solid #21262d; border-radius:12px; padding:10px 12px; }
+    .sm-ip-kpi b { display:block; font-size:22px; font-weight:800; font-family:ui-monospace,monospace; line-height:1.15; }
+    .sm-ip-kpi span { font-size:10px; color:#8b949e; text-transform:uppercase; letter-spacing:.06em; font-weight:700; }
+    .sm-chain { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+    @media (max-width: 900px) { .sm-chain { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    .sm-phase { position:relative; border-radius:12px; padding:10px 12px; border:1px solid #21262d; background:#0b0f14; opacity:.45; }
+    .sm-phase.on { opacity:1; }
+    .sm-story { position:relative; margin-left:10px; border-left:2px solid #21262d; }
+    .sm-story-item { position:relative; padding:6px 0 10px 18px; }
+    .sm-story-item::before { content:''; position:absolute; left:-7px; top:11px; width:12px; height:12px; border-radius:50%; background:var(--c); box-shadow:0 0 0 3px #0d1117, 0 0 10px var(--c); }
+    .sm-req-row { cursor:pointer; }
+    .sm-req-detail td { background:#0b0f14 !important; }
+    .sm-seg { display:inline-flex; border:1px solid #30363d; border-radius:8px; overflow:hidden; }
+    .sm-seg button { padding:4px 10px; font-size:11px; font-weight:700; color:#8b949e; background:#0d1117; }
+    .sm-seg button.on { background:#1f6feb33; color:#79c0ff; }
+    .sm-ip-link { font-size:11px; color:#79c0ff; padding:3px 8px; border:1px solid #30363d; border-radius:7px; white-space:nowrap; }
+    .sm-ip-link:hover { background:#161b22; }
+    @keyframes sm-spin { to { transform:rotate(360deg); } }
+    .sm-spin { width:28px; height:28px; border:3px solid #30363d; border-top-color:#58a6ff; border-radius:50%; animation:sm-spin .8s linear infinite; }
 </style>
 {% endblock %}
 
@@ -205,6 +234,13 @@
         </select> log lines
     </label>
     <span class="text-xs sm-muted" id="sm-window"></span>
+    <form class="flex items-center gap-1.5" onsubmit="event.preventDefault(); smInvestigate($('sm-ip-q').value.trim())">
+        <input id="sm-ip-q" class="sm-input font-mono" style="width:170px" placeholder="Investigate IP…" autocomplete="off" spellcheck="false">
+        <button class="sm-btn" type="submit" title="Show everything this IP did">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M20 20l-3.5-3.5"/></svg>
+            Investigate
+        </button>
+    </form>
     <span class="ml-auto text-xs sm-muted" id="sm-updated">—</span>
     <button class="sm-btn" id="sm-fs-btn" onclick="smToggleFullscreen()" title="Full screen (press F)">
         <svg class="w-3.5 h-3.5" id="sm-fs-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
@@ -590,6 +626,38 @@
     </div>
 </div>
 
+{# ── IP investigation drawer ───────────────────────────────────────────── #}
+<div id="sm-ip-drawer" class="hidden" role="dialog" aria-modal="true" aria-label="IP investigation">
+    <div class="sm-ip-bg" onclick="smCloseIp()"></div>
+    <div class="sm-ip-panel sm-scroll">
+        <div class="sm-ip-head px-5 py-3">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="text-[10px] font-bold tracking-widest uppercase" style="color:#f87171">IP Investigation</div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span id="sm-ip-title" class="font-mono text-2xl font-black text-white"></span>
+                        <span id="sm-ip-badges" class="flex items-center gap-1.5 flex-wrap"></span>
+                    </div>
+                    <div id="sm-ip-sub" class="text-xs sm-muted mt-0.5"></div>
+                </div>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <label class="text-[11px] sm-muted flex items-center gap-1">Search last
+                        <select id="sm-ip-depth" class="sm-input" onchange="smInvestigate(ipCur)">
+                            <option value="5000">5k</option><option value="20000" selected>20k</option><option value="50000">50k</option>
+                        </select> lines</label>
+                    <button class="sm-btn" onclick="smInvestigate(ipCur)" title="Re-read the logs">↻ Refresh</button>
+                    <button class="sm-btn" id="sm-ip-feed" onclick="smCloseIp(); smFilterIp(ipCur)" title="Filter the live event feed to this IP">Event feed</button>
+                    <button class="sm-btn" onclick="smIpExport('json')">JSON</button>
+                    <button class="sm-btn" onclick="smIpExport('csv')">CSV</button>
+                    <button class="sm-btn sm-btn-danger" id="sm-ip-block" onclick="smIpBlock()">Block</button>
+                    <button class="sm-btn" onclick="smCloseIp()" title="Close (Esc)">✕</button>
+                </div>
+            </div>
+        </div>
+        <div id="sm-ip-body" class="p-5 space-y-4"></div>
+    </div>
+</div>
+
 </div></div>
 
 <script src="/static/vendor/d3.min.js"></script>
@@ -868,7 +936,7 @@ function renderAttackers(list) {
         <tr>
             <td><input type="checkbox" class="accent-red-500" ${blocklist.has(a.ip) ? 'checked' : ''} data-ip="${esc(a.ip)}" onchange="smToggleBlock(this.dataset.ip, this.checked)" title="Add to blocklist"></td>
             <td>
-                <button class="font-mono font-bold hover:underline" style="color:#c9d1d9" data-ip="${esc(a.ip)}" onclick="smFilterIp(this.dataset.ip)" title="Show events from this IP">${esc(a.ip)}</button>
+                <button class="font-mono font-bold hover:underline" style="color:#c9d1d9" data-ip="${esc(a.ip)}" onclick="smInvestigate(this.dataset.ip)" title="Investigate: everything this IP did">${esc(a.ip)}</button>
                 ${a.internal ? '<span class="chip ml-1" style="color:#60a5fa">internal</span>' : ''}
                 ${a.geo ? `<div class="text-[11px]" style="color:#8b949e">${SecMap.flag(a.geo.cc)} ${esc(a.geo.city ? a.geo.city + ', ' : '')}${esc(a.geo.country)}</div>` : ''}
                 ${a.nodes.length && ACTIVE_NODE === 'all' ? `<div class="text-[10px] sm-muted">${a.nodes.map(esc).join(', ')}</div>` : ''}
@@ -885,7 +953,8 @@ function renderAttackers(list) {
             </td>
             <td><div class="flex flex-wrap gap-1" style="max-width:260px">${a.categories.map(c => `<span class="chip">${esc(catLabel(c))}</span>`).join('')}</div></td>
             <td class="whitespace-nowrap"><div class="sm-text">${esc(ago(a.last_seen))}</div><div class="text-[10px] sm-muted">${a.peak_rpm} req/min peak</div></td>
-            <td class="whitespace-nowrap"><button class="sm-btn" style="padding:3px 8px" data-ip="${esc(a.ip)}" onclick="smCopy('deny ' + this.dataset.ip + ';', this)">deny</button></td>
+            <td class="whitespace-nowrap"><button class="sm-btn" style="padding:3px 8px" data-ip="${esc(a.ip)}" onclick="smInvestigate(this.dataset.ip)">Details</button>
+                <button class="sm-btn" style="padding:3px 8px" data-ip="${esc(a.ip)}" onclick="smCopy('deny ' + this.dataset.ip + ';', this)">deny</button></td>
         </tr>`).join('');
 }
 
@@ -895,7 +964,7 @@ function renderBehaviors(list) {
             <div class="flex items-center justify-between gap-2">
                 <span class="text-xs font-bold sm-text">${esc(catLabel(b.type))}</span>${sevBadge(b.severity)}
             </div>
-            <button class="font-mono text-xs hover:underline" style="color:${b.internal ? '#93c5fd' : '#fca5a5'}" data-ip="${esc(b.ip)}" onclick="smFilterIp(this.dataset.ip)">${esc(b.ip)}</button>
+            <button class="font-mono text-xs hover:underline" style="color:${b.internal ? '#93c5fd' : '#fca5a5'}" data-ip="${esc(b.ip)}" onclick="smInvestigate(this.dataset.ip)" title="Investigate this IP">${esc(b.ip)}</button>
             ${b.internal ? '<span class="chip ml-1" style="color:#60a5fa">internal · not counted</span>' : ''}
             <div class="text-[11px] sm-muted">${esc(b.detail)}</div>
         </div>`).join('') : '<div class="text-xs sm-muted py-4 text-center">No brute force, enumeration or flood patterns</div>';
@@ -943,7 +1012,7 @@ function smRenderEvents() {
             <td class="font-mono whitespace-nowrap sm-muted">${fmtTime(e.dt_iso)}</td>
             <td>${sevBadge(e.severity)}</td>
             <td class="whitespace-nowrap">
-                <button class="font-mono hover:underline sm-text" data-ip="${esc(e.ip)}" onclick="smFilterIp(this.dataset.ip)">${esc(e.ip)}</button>
+                <button class="font-mono hover:underline sm-text" data-ip="${esc(e.ip)}" onclick="smInvestigate(this.dataset.ip)" title="Investigate this IP">${esc(e.ip)}</button>
                 ${e.node && ACTIVE_NODE === 'all' ? `<div class="text-[10px] sm-muted">${esc(e.node)}</div>` : ''}
             </td>
             <td style="max-width:520px">
@@ -1045,7 +1114,7 @@ function renderGeo(d) {
     const items = d.events.slice(0, 25);
     const tickerRows = n => items.length ? items.slice(0, n).map(e => {
         const k = e.dt_iso + e.ip + e.path, isNew = tickerSeen.size && !tickerSeen.has(k);
-        return `<div class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-white/5 ${isNew ? 'sm-tick-in' : ''}" data-ip="${esc(e.ip)}" onclick="smFilterIp(this.dataset.ip)">
+        return `<div class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-white/5 ${isNew ? 'sm-tick-in' : ''}" data-ip="${esc(e.ip)}" onclick="smInvestigate(this.dataset.ip)" title="Investigate this IP">
             <span class="w-1 self-stretch rounded-full" style="background:${SEV_COLOR[e.severity]}"></span>
             <span class="text-base leading-none">${e.cc ? SecMap.flag(e.cc) : '🏠'}</span>
             <div class="min-w-0 flex-1">
@@ -1338,6 +1407,299 @@ function smUpdateBlocklist() {
         : '# Select IPs in the attacker table, or add them above.';
 }
 
+// ── IP investigation drawer ──────────────────────────────────────────────────
+const PHASE_COLOR = { recon:'#60a5fa', discovery:'#facc15', exploit:'#f87171', credential:'#fb923c', impact:'#c084fc', browse:'#6e7681' };
+const OUT_COLOR = { served:'#facc15', blocked:'#34d399', failed:'#8b949e' };
+let ipCur = '', ipReport = null, ipReqFilter = 'all', ipReqLimit = 200, ipSeq = 0, ipOpenRow = -1;
+
+function fmtDur(s) {
+    if (s >= 86400) return (s / 86400).toFixed(1) + ' d';
+    if (s >= 3600) return (s / 3600).toFixed(1) + ' h';
+    if (s >= 60) return Math.round(s / 60) + ' min';
+    return s + ' s';
+}
+function fmtBytes(b) {
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+    if (b >= 1024) return (b / 1024).toFixed(1) + ' KB';
+    return b + ' B';
+}
+function ipCat(id) { return (ipReport?.categories || []).find(c => c.id === id)?.label || catLabel(id); }
+function statusColor(c) { return c >= 500 ? '#f87171' : c >= 400 ? (c === 403 || c === 429 || c === 444 ? '#34d399' : '#8b949e') : c >= 300 ? '#79c0ff' : '#facc15'; }
+function statusChip(s) { return `<span class="chip font-mono" style="color:${statusColor(s.code)}">${s.code}${s.count > 1 ? ' ×' + s.count.toLocaleString() : ''}</span>`; }
+
+async function smInvestigate(ip) {
+    ip = (ip || '').trim();
+    if (!ip) return;
+    if (!IP_RE.test(ip) || ip.includes('/')) { $('sm-ip-q').style.borderColor = '#f87171'; return; }
+    $('sm-ip-q').style.borderColor = '';
+    // A natively full-screen map panel would hide the drawer.
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl && fsEl !== smRoot) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    const changed = ip !== ipCur;
+    ipCur = ip;
+    if (changed) { ipReqFilter = 'all'; ipReqLimit = 200; ipOpenRow = -1; }
+    $('sm-ip-drawer').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    $('sm-ip-title').textContent = ip;
+    $('sm-ip-block').textContent = blocklist.has(ip) ? 'Unblock' : 'Block';
+    if (changed || !ipReport) {
+        $('sm-ip-badges').innerHTML = ''; $('sm-ip-sub').textContent = '';
+        $('sm-ip-body').innerHTML = '<div class="flex flex-col items-center gap-3 py-24 sm-muted text-sm"><div class="sm-spin"></div>Reading logs and reconstructing activity…</div>';
+    }
+    const u = new URL(location.href); u.searchParams.set('ip', ip); history.replaceState(null, '', u);
+    const seq = ++ipSeq;
+    try {
+        const res = await fetch(`/api/security/ip?ip=${encodeURIComponent(ip)}&node=${encodeURIComponent(ACTIVE_NODE)}&lines=${$('sm-ip-depth').value}`,
+                                { credentials: 'same-origin' });
+        if (res.status === 401) { location.href = '/login'; return; }
+        const r = await res.json();
+        if (seq !== ipSeq) return;
+        if (!res.ok || r.error) throw new Error(r.error || res.statusText);
+        ipReport = r;
+        renderIp(r);
+    } catch (e) {
+        if (seq !== ipSeq) return;
+        $('sm-ip-body').innerHTML = `<div class="sm-ip-sec p-6 text-sm" style="color:#fca5a5">Investigation failed: ${esc(e.message)}</div>`;
+    }
+}
+function smCloseIp() {
+    if ($('sm-ip-drawer').classList.contains('hidden')) return;
+    $('sm-ip-drawer').classList.add('hidden');
+    document.body.style.overflow = '';
+    ipSeq++;
+    const u = new URL(location.href); u.searchParams.delete('ip'); history.replaceState(null, '', u);
+}
+const ipOpen = () => !$('sm-ip-drawer').classList.contains('hidden');
+function smIpBlock() {
+    smToggleBlock(ipCur, !blocklist.has(ipCur));
+    $('sm-ip-block').textContent = blocklist.has(ipCur) ? 'Unblock' : 'Block';
+    if (data) renderAttackers(data.attackers);
+    if (blocklist.has(ipCur)) { smCloseIp(); smOpenBlocklist(); }
+}
+function smIpExport(kind) {
+    if (!ipReport) return;
+    let blob, name = `ip-${ipReport.ip.replace(/[:.]/g, '_')}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}`;
+    if (kind === 'json') {
+        blob = new Blob([JSON.stringify(ipReport, null, 2)], { type: 'application/json' }); name += '.json';
+    } else {
+        const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const rows = [['time', 'node', 'method', 'path', 'status', 'bytes', 'outcome', 'action', 'categories', 'user_agent', 'referer']]
+            .concat((ipReport.requests || []).map(r => [r.dt_iso, r.node, r.method, r.path, r.status, r.bytes, r.outcome, r.action, r.cats.join(' '), r.ua, r.referer]));
+        blob = new Blob([rows.map(r => r.map(q).join(',')).join('\n')], { type: 'text/csv' }); name += '.csv';
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function renderIp(r) {
+    const p = r.profile, g = p.geo, lvl = r.verdict.level, col = SEV_COLOR[lvl] || '#8b949e';
+    $('sm-ip-badges').innerHTML =
+        (r.risk ? sevBadge(r.risk.risk) + `<span class="font-mono text-xs font-bold" style="color:${SEV_COLOR[r.risk.risk]}">${r.risk.score}/100</span>` : '') +
+        (p.internal ? '<span class="chip" style="color:#60a5fa">internal</span>' : '') +
+        (p.trusted ? '<span class="chip" style="color:#34d399">trusted</span>' : '') +
+        (blocklist.has(r.ip) ? '<span class="chip" style="color:#fca5a5">in blocklist</span>' : '');
+    const where = g ? `${SecMap.flag(g.cc)} ${[g.city, g.region && g.region !== g.city ? g.region : '', g.country].filter(Boolean).map(esc).join(', ')}`
+                      + (g.province_name ? ` · <span class="lao">${esc(g.province_name)} ${esc(g.province_name_lo || '')}</span>` : '')
+                    : (p.internal ? 'Private / internal network' : 'Location unknown');
+    $('sm-ip-sub').innerHTML = `${where}${p.rdns ? ` · <span class="font-mono">${esc(p.rdns)}</span>` : ''} · scope <b class="sm-text">${esc(r.node === "all" ? "All nodes" : scopeLabel(null))}</b>
+        · ${r.lines_scanned.toLocaleString()} lines searched${r.window.from ? ` (${fmtTime(r.window.from)} → ${fmtTime(r.window.to)})` : ''}`;
+
+    const ext = p.internal ? '' : `<div class="flex items-center gap-1.5 flex-wrap text-[11px] sm-muted">Reputation lookup <span title="Opens a third-party site with this IP">(external)</span>:
+        ${[['AbuseIPDB', 'https://www.abuseipdb.com/check/'], ['VirusTotal', 'https://www.virustotal.com/gui/ip-address/'],
+           ['Shodan', 'https://www.shodan.io/host/'], ['ipinfo', 'https://ipinfo.io/']]
+          .map(([n, base]) => `<a class="sm-ip-link" target="_blank" rel="noopener noreferrer" href="${base}${encodeURIComponent(r.ip)}">${n} ↗</a>`).join('')}</div>`;
+    const unreach = (r.unreachable || []).length ? `<div class="px-4 py-2 rounded-xl text-xs" style="background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.35);color:#fdba74">
+        Not searched (offline): ${r.unreachable.map(u => esc(u.name)).join(', ')}</div>` : '';
+    const verdict = `<div class="rounded-2xl p-4 flex items-start gap-4" style="background:linear-gradient(90deg, ${col}1f, transparent 70%);border:1px solid ${col}66">
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style="background:${col}22;border:1px solid ${col}88">
+            <svg class="w-7 h-7" fill="none" stroke="${col}" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"/><path stroke-linecap="round" stroke-width="1.8" d="M12 8v4m0 3h.01"/></svg>
+        </div>
+        <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 flex-wrap"><span class="text-lg font-black text-white">${esc(r.verdict.actor)}</span>${sevBadge(lvl)}</div>
+            <div class="text-sm mt-0.5" style="color:#c9d1d9">${esc(r.verdict.summary)}</div>
+            ${p.internal_hint ? `<div class="text-xs mt-1" style="color:#93c5fd">${esc(p.internal_hint)}</div>` : ''}
+            <div class="mt-2">${ext}</div>
+        </div></div>`;
+
+    if (!r.found) {
+        $('sm-ip-body').innerHTML = unreach + verdict + ipErrorsHtml(r);
+        return;
+    }
+    const s = r.stats;
+    const kpis = [
+        ['Requests', s.requests.toLocaleString(), '#c9d1d9'],
+        ['Malicious', s.threats.toLocaleString(), s.threats ? '#f87171' : '#484f58'],
+        ['Attacks served', s.served_threats.toLocaleString(), s.served_threats ? '#facc15' : '#484f58'],
+        ['Blocked', s.blocked.toLocaleString(), s.blocked ? '#34d399' : '#484f58'],
+        ['Active for', fmtDur(s.duration_s), '#c9d1d9'],
+        ['Peak req/min', s.peak_rpm.toLocaleString(), s.peak_rpm >= (data?.thresholds?.flood_rpm || 300) ? '#f87171' : '#c9d1d9'],
+        ['Unique URLs', s.unique_paths.toLocaleString(), '#c9d1d9'],
+        ['Data sent', fmtBytes(s.bytes), '#c9d1d9'],
+    ].map(([l, v, c]) => `<div class="sm-ip-kpi"><span>${l}</span><b style="color:${c}">${v}</b></div>`).join('');
+
+    const chain = r.phases.map((ph, i) => `<div class="sm-phase ${ph.reached ? 'on' : ''}" style="${ph.reached ? `border-color:${PHASE_COLOR[ph.id]}88;background:linear-gradient(180deg, ${PHASE_COLOR[ph.id]}18, #0b0f14)` : ''}" title="${esc(ph.desc)}">
+            <div class="flex items-center justify-between gap-1"><span class="text-[10px] font-black uppercase tracking-wider" style="color:${PHASE_COLOR[ph.id]}">${i + 1}. ${esc(ph.label)}</span>
+                ${ph.reached ? '<span class="w-2 h-2 rounded-full" style="background:' + PHASE_COLOR[ph.id] + ';box-shadow:0 0 8px ' + PHASE_COLOR[ph.id] + '"></span>' : ''}</div>
+            <div class="font-mono text-xl font-black mt-1" style="color:${ph.reached ? '#fff' : '#484f58'}">${ph.count.toLocaleString()}</div>
+            <div class="text-[10px] sm-muted">${ph.first ? 'from ' + fmtTime(ph.first) : 'not observed'}${ph.served ? ` · <span style="color:#facc15">${ph.served} served</span>` : ''}</div>
+            <div class="flex flex-wrap gap-1 mt-1.5">${ph.categories.map(c => `<span class="chip">${esc(ipCat(c))}</span>`).join('')}</div>
+        </div>`).join('');
+
+    const ev = list => list.length ? `<table class="sm-table mt-2" style="font-size:11px"><tbody>${list.map(e => `<tr>
+            <td class="font-mono whitespace-nowrap sm-muted">${fmtTime(e.dt_iso)}</td>
+            <td class="font-mono break-all" style="width:100%"><span style="color:#d2a8ff">${esc(e.method)}</span> <span class="sm-text">${esc(e.path)}</span>${e.node && ACTIVE_NODE === 'all' ? ` <span class="chip">${esc(e.node)}</span>` : ''}</td>
+            <td class="font-mono whitespace-nowrap" style="color:${statusColor(e.status)}">${e.status}</td>
+            <td class="font-mono whitespace-nowrap sm-muted text-right">${fmtBytes(e.bytes)}</td></tr>`).join('')}</tbody></table>` : '';
+    const findings = r.findings.length ? r.findings.map(f => `<div class="rounded-xl px-4 py-3" style="background:#0b0f14;border:1px solid #21262d;border-left:3px solid ${SEV_COLOR[f.severity]}">
+            <div class="flex items-center gap-2">${sevBadge(f.severity)}<span class="text-sm font-bold text-white">${esc(f.title)}</span></div>
+            <div class="text-xs mt-1" style="color:#adbac7">${esc(f.detail)}</div>${ev(f.evidence)}</div>`).join('')
+        : '<div class="text-xs sm-muted">Nothing notable.</div>';
+
+    const story = r.story.slice().reverse().map(st => {
+        const c = st.phase === 'browse' ? PHASE_COLOR.browse : SEV_COLOR[st.severity] || PHASE_COLOR[st.phase];
+        const outs = Object.entries(st.outcomes).map(([o, n]) => `<span style="color:${OUT_COLOR[o]}">${n.toLocaleString()} ${o}</span>`).join(' · ');
+        return `<div class="sm-story-item" style="--c:${c}">
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-mono text-[11px] sm-muted">${fmtTime(st.start)}${st.end !== st.start ? ' → ' + fmtTime(st.end).slice(-8) : ''}</span>
+                <span class="text-sm font-bold" style="color:${st.phase === 'browse' ? '#adbac7' : '#fff'}">${esc(st.action)}</span>
+                ${st.count > 1 ? `<span class="font-mono text-xs font-bold" style="color:${c}">×${st.count.toLocaleString()}</span>` : ''}
+                <span class="chip" style="color:${PHASE_COLOR[st.phase]}">${esc(st.phase === 'browse' ? 'activity' : (r.phases.find(x => x.id === st.phase)?.label || st.phase))}</span>
+                ${st.node && ACTIVE_NODE === 'all' ? `<span class="chip">${esc(st.node)}</span>` : ''}
+            </div>
+            <div class="mt-1 space-y-0.5">${st.samples.map(x => `<div class="font-mono text-[11px] break-all" style="color:#a5d6ff"><span style="color:#d2a8ff">${esc(st.methods[0] || '')}</span> ${esc(x)}</div>`).join('')}
+                ${st.count > st.samples.length ? `<div class="text-[10px] sm-muted">… +${(st.count - st.samples.length).toLocaleString()} more</div>` : ''}</div>
+            <div class="flex items-center gap-1.5 flex-wrap mt-1 text-[11px]">${st.statuses.map(statusChip).join('')}<span class="sm-muted">→</span> ${outs}</div>
+        </div>`;
+    }).join('');
+
+    const topPaths = r.top_paths.map(t => `<tr>
+            <td class="font-mono break-all" style="max-width:380px"><span class="sm-text">${esc(t.path)}</span>
+                <div class="flex flex-wrap gap-1 mt-0.5">${t.cats.map(c => `<span class="chip">${esc(ipCat(c))}</span>`).join('')}</div></td>
+            <td class="font-mono text-right sm-text font-bold">${t.count.toLocaleString()}</td>
+            <td><div class="flex flex-wrap gap-1">${t.statuses.map(statusChip).join('')}</div></td></tr>`).join('');
+    const bars = (rows, key, lbl, color) => {
+        const max = Math.max(1, ...rows.map(x => x.count));
+        return rows.map(x => `<div class="mb-1.5"><div class="flex justify-between gap-2 text-[11px]"><span class="truncate font-mono sm-text" title="${esc(x[key])}">${lbl(x)}</span><span class="font-mono sm-muted">${x.count.toLocaleString()}</span></div>
+            <div class="bar-wrap h-1"><div class="bar-fill" style="width:${(x.count / max * 100).toFixed(1)}%;background:${typeof color === 'function' ? color(x) : color}"></div></div></div>`).join('');
+    };
+    const fp = `
+        <div class="text-[10px] font-bold uppercase tracking-wider sm-muted mb-1">Response codes</div>
+        ${bars(s.statuses.map(x => ({ ...x, k: String(x.code) })), 'k', x => x.code, x => statusColor(x.code))}
+        <div class="text-[10px] font-bold uppercase tracking-wider sm-muted mb-1 mt-3">Methods</div>
+        ${bars(s.methods, 'method', x => esc(x.method), '#d2a8ff')}
+        <div class="text-[10px] font-bold uppercase tracking-wider sm-muted mb-1 mt-3">User-Agents (${s.distinct_user_agents})</div>
+        ${s.user_agents.map(x => `<div class="text-[11px] font-mono break-all py-1" style="border-bottom:1px solid #161b22">
+            ${x.tool ? `<span class="chip" style="color:#fca5a5;border-color:rgba(248,113,113,.5)">${esc(x.tool)}</span> ` : ''}<span class="sm-text">${esc(x.ua)}</span> <span class="sm-muted">×${x.count.toLocaleString()}</span></div>`).join('')}
+        ${s.referers.length ? `<div class="text-[10px] font-bold uppercase tracking-wider sm-muted mb-1 mt-3">Referers</div>${bars(s.referers, 'referer', x => esc(x.referer), '#79c0ff')}` : ''}
+        ${s.nodes.length > 1 || ACTIVE_NODE === 'all' ? `<div class="text-[10px] font-bold uppercase tracking-wider sm-muted mb-1 mt-3">Servers reached</div>${bars(s.nodes, 'name', x => esc(x.name), '#34d399')}` : ''}`;
+
+    const sessions = r.sessions.map(se => `<div class="rounded-lg px-3 py-2" style="background:#0b0f14;border:1px solid #21262d">
+            <div class="flex justify-between gap-2 text-[11px]"><span class="font-mono sm-text">${fmtTime(se.start)} → ${fmtTime(se.end)}</span>
+                <span class="font-mono"><span class="sm-text">${se.requests.toLocaleString()}</span> req${se.threats ? ` · <span style="color:#f87171">${se.threats.toLocaleString()} malicious</span>` : ''}</span></div>
+            <div class="text-[10px] sm-muted mt-0.5">${se.actions.map(a => `${esc(a.action)} ×${a.count}`).join(' · ')}</div></div>`).join('');
+
+    const recs = r.recommendations.length ? `<section class="sm-ip-sec"><h3>Recommended actions</h3>
+        <ol class="p-4 pt-2 space-y-1.5 text-sm list-decimal list-inside" style="color:#c9d1d9">${r.recommendations.map(x => `<li>${esc(x).replace(/`([^`]+)`/g, '<code class="font-mono text-xs px-1 rounded" style="background:#161b22;color:#a5d6ff">$1</code>')}</li>`).join('')}</ol></section>` : '';
+
+    $('sm-ip-body').innerHTML = `${unreach}${verdict}
+        <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">${kpis}</div>
+        <section class="sm-ip-sec"><h3>Attack chain <span class="normal-case tracking-normal font-normal sm-muted">· how far this IP got</span></h3><div class="p-4 pt-3 sm-chain">${chain}</div></section>
+        <section class="sm-ip-sec"><h3>Findings <span class="normal-case tracking-normal font-normal sm-muted">· what needs a human look</span></h3><div class="p-4 pt-3 space-y-2">${findings}</div></section>
+        <section class="sm-ip-sec"><h3>Activity over time
+                <span class="normal-case tracking-normal font-normal sm-muted">· <span style="color:#58a6ff">■</span> normal <span style="color:#f87171">■</span> malicious <span style="color:#34d399">■</span> blocked · ${r.histogram ? fmtDur(r.histogram.bin_seconds) + ' per bar' : ''}</span></h3>
+            <div class="p-4 pt-3"><svg id="sm-ip-hist" class="w-full" style="height:120px"></svg>
+                <div class="flex justify-between text-[10px] font-mono sm-muted mt-1"><span>${fmtTime(s.first_seen)}</span><span>${fmtTime(s.last_seen)}</span></div></div></section>
+        <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+            <section class="sm-ip-sec xl:col-span-3"><h3>What it did, step by step
+                    <span class="normal-case tracking-normal font-normal sm-muted">· newest first${r.story_total > r.story.length ? ` · last ${r.story.length} of ${r.story_total} steps` : ''}</span></h3>
+                <div class="p-4 pt-3 overflow-y-auto sm-scroll" style="max-height:640px"><div class="sm-story">${story}</div></div></section>
+            <div class="xl:col-span-2 space-y-4">
+                <section class="sm-ip-sec"><h3>Sessions <span class="normal-case tracking-normal font-normal sm-muted">· split after 30 min idle${r.sessions_total > r.sessions.length ? ` · last ${r.sessions.length} of ${r.sessions_total}` : ''}</span></h3>
+                    <div class="p-4 pt-3 space-y-1.5 overflow-y-auto sm-scroll" style="max-height:260px">${sessions}</div></section>
+                <section class="sm-ip-sec"><h3>Fingerprint</h3><div class="p-4 pt-3">${fp}</div></section>
+            </div>
+        </div>
+        <section class="sm-ip-sec"><h3>Most requested URLs</h3>
+            <div class="overflow-auto sm-scroll" style="max-height:360px"><table class="sm-table"><thead><tr><th>Path</th><th class="text-right">Hits</th><th>Responses</th></tr></thead><tbody>${topPaths}</tbody></table></div></section>
+        <section class="sm-ip-sec" id="sm-ip-reqs-sec"></section>
+        ${ipErrorsHtml(r)}
+        ${recs}`;
+    renderIpHist(r.histogram);
+    renderIpRequests();
+}
+
+function ipErrorsHtml(r) {
+    if (!r.error_lines?.length) return '';
+    return `<section class="sm-ip-sec"><h3>Nginx error.log mentions <span class="normal-case tracking-normal font-normal sm-muted">· ${r.error_lines.length}</span></h3>
+        <div class="p-4 pt-3 space-y-1 overflow-y-auto sm-scroll" style="max-height:260px">${r.error_lines.map(e => `<div class="font-mono text-[11px] break-all">
+            <span class="sm-muted">${fmtTime(e.dt_iso)}</span> <span style="color:${e.level === 'error' || e.level === 'crit' ? '#fb923c' : '#8b949e'}">[${esc(e.level)}]</span>
+            ${e.node && ACTIVE_NODE === 'all' ? `<span class="chip">${esc(e.node)}</span>` : ''} <span class="sm-text">${esc(e.message)}</span></div>`).join('')}</div></section>`;
+}
+
+function renderIpHist(h) {
+    const svg = $('sm-ip-hist');
+    if (!svg || !h) return;
+    const W = svg.clientWidth || 800, H = 120, n = h.bins.length, gap = n > 40 ? 1 : 2, bw = Math.max(1, (W - gap * (n - 1)) / n);
+    const max = Math.max(1, ...h.bins.map(b => b.total));
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.innerHTML = `<line x1="0" x2="${W}" y1="${H - .5}" y2="${H - .5}" stroke="#21262d"/>` + h.bins.map((b, i) => {
+        if (!b.total) return '';
+        const x = i * (bw + gap), th = b.total / max * (H - 8), mal = b.threats / max * (H - 8), blk = b.blocked / max * (H - 8);
+        const t = new Date(new Date(h.start).getTime() + i * h.bin_seconds * 1000);
+        return `<g><title>${esc(fmtTime(t.toISOString()))}: ${b.total} requests, ${b.threats} malicious, ${b.blocked} blocked</title>
+            <rect x="${x}" y="${H - th}" width="${bw}" height="${th}" rx="1.5" fill="#58a6ff" opacity=".55"/>
+            ${mal ? `<rect x="${x}" y="${H - mal}" width="${bw}" height="${mal}" rx="1.5" fill="#f87171"/>` : ''}
+            ${blk ? `<rect x="${x}" y="${H - blk}" width="${bw}" height="${Math.min(blk, 3)}" fill="#34d399"/>` : ''}</g>`;
+    }).join('');
+}
+
+function smIpReqFilter(f) { ipReqFilter = f; ipReqLimit = 200; ipOpenRow = -1; renderIpRequests(); }
+function smIpReqToggle(i) { ipOpenRow = ipOpenRow === i ? -1 : i; renderIpRequests(); }
+function renderIpRequests() {
+    const sec = $('sm-ip-reqs-sec'); if (!sec || !ipReport) return;
+    const q = ($('sm-ip-rq')?.value || '').toLowerCase();
+    const all = ipReport.requests;
+    const pred = { all: () => true, threats: r => r.cats.length, served: r => r.cats.length && r.outcome === 'served',
+                   errors: r => r.status >= 400, login: r => r.action === 'Login attempt' }[ipReqFilter];
+    const rows = all.filter(r => pred(r) && (!q || (r.path + ' ' + r.ua + ' ' + r.status + ' ' + r.action).toLowerCase().includes(q)));
+    const segs = [['all', 'All'], ['threats', 'Malicious'], ['served', 'Served attacks'], ['errors', '4xx/5xx'], ['login', 'Logins']]
+        .map(([k, l]) => `<button class="${ipReqFilter === k ? 'on' : ''}" onclick="smIpReqFilter('${k}')">${l}</button>`).join('');
+    const hadFocus = document.activeElement?.id === 'sm-ip-rq';
+    sec.innerHTML = `<h3 class="flex-wrap">Full request log
+            <span class="normal-case tracking-normal font-normal sm-muted">· ${rows.length.toLocaleString()} shown of ${ipReport.requests_total.toLocaleString()}${ipReport.requests_total > all.length ? ` (newest ${all.length.toLocaleString()} loaded — export for the rest)` : ''} · click a row for details</span></h3>
+        <div class="px-4 pt-3 flex items-center gap-2 flex-wrap"><div class="sm-seg">${segs}</div>
+            <input id="sm-ip-rq" class="sm-input" style="width:240px" placeholder="Filter path / status / UA…" value="${esc(q)}" oninput="ipReqLimit = 200; renderIpRequests()"></div>
+        <div class="overflow-auto sm-scroll mt-2" style="max-height:560px"><table class="sm-table">
+            <thead><tr><th>Time</th><th>Request</th><th>Status</th><th class="text-right">Size</th><th>Action</th></tr></thead>
+            <tbody>${rows.slice(0, ipReqLimit).map((r, i) => `
+                <tr class="sm-req-row" onclick="smIpReqToggle(${i})">
+                    <td class="font-mono whitespace-nowrap sm-muted">${fmtTime(r.dt_iso)}</td>
+                    <td class="font-mono break-all" style="max-width:560px"><span style="color:#d2a8ff">${esc(r.method)}</span> <span class="sm-text">${esc(r.path)}</span></td>
+                    <td class="font-mono whitespace-nowrap" style="color:${statusColor(r.status)}">${r.status}<div class="text-[10px]" style="color:${OUT_COLOR[r.outcome]}">${r.cats.length ? esc(r.outcome) : ''}</div></td>
+                    <td class="font-mono whitespace-nowrap text-right sm-muted">${fmtBytes(r.bytes)}</td>
+                    <td><div class="flex flex-wrap gap-1 items-center">${r.cats.length ? sevBadge(r.severity) : ''}<span class="text-[11px]" style="color:${r.cats.length ? '#fff' : '#8b949e'}">${esc(r.action)}</span></div></td>
+                </tr>${ipOpenRow === i ? `<tr class="sm-req-detail"><td colspan="5"><div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-[11px] font-mono break-all">
+                    <div><span class="sm-muted">Time</span> <span class="sm-text">${esc(r.dt_iso)}</span></div>
+                    <div><span class="sm-muted">Server</span> <span class="sm-text">${esc(r.node || 'Local')}</span></div>
+                    <div class="md:col-span-2"><span class="sm-muted">URL (decoded)</span> <span style="color:#a5d6ff">${esc((() => { try { return decodeURIComponent(r.path.replace(/\+/g, ' ')); } catch { return r.path; } })())}</span></div>
+                    <div class="md:col-span-2"><span class="sm-muted">User-Agent</span> <span class="sm-text">${esc(r.ua)}</span></div>
+                    <div class="md:col-span-2"><span class="sm-muted">Referer</span> <span class="sm-text">${esc(r.referer)}</span></div>
+                    <div><span class="sm-muted">Response</span> <span class="sm-text">${r.status} · ${r.bytes.toLocaleString()} bytes · ${esc(r.outcome)}</span></div>
+                    <div><span class="sm-muted">Detected</span> ${r.cats.length ? r.cats.map(c => `<span class="chip">${esc(ipCat(c))}</span>`).join(' ') : '<span class="sm-muted">nothing</span>'}</div>
+                </div></td></tr>` : ''}`).join('') || '<tr><td colspan="5" class="sm-muted text-center py-6">No requests match</td></tr>'}</tbody></table>
+            ${rows.length > ipReqLimit ? `<div class="p-3 text-center"><button class="sm-btn" onclick="ipReqLimit += 300; renderIpRequests()">Show ${Math.min(300, rows.length - ipReqLimit)} more</button></div>` : ''}</div>`;
+    if (hadFocus) { const el = $('sm-ip-rq'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+}
+
+// Esc closes the drawer first (before map/blocklist handlers); page shortcuts
+// (F / M / L) are disabled while it is open.
+window.addEventListener('keydown', e => {
+    if (!ipOpen()) return;
+    if (e.key === 'Escape') { smCloseIp(); e.stopImmediatePropagation(); e.preventDefault(); return; }
+    if (!/INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName)) e.stopImmediatePropagation();
+}, true);
+window.addEventListener('resize', () => { if (ipOpen() && ipReport) renderIpHist(ipReport.histogram); });
+
 // ── Live socket ──────────────────────────────────────────────────────────────
 function wsUrl() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1454,7 +1816,7 @@ function smTick() {
 setInterval(smTick, 1000); smTick();
 renderGauge();
 
-SecMap.init($('sm-map'), { onSelect: ip => smFilterIp(ip), catLabel })
+SecMap.init($('sm-map'), { onSelect: ip => smInvestigate(ip), catLabel })
     .then(() => {
         mapReady = true;
         $('sm-map').addEventListener('dblclick', () => { if (!mapFsOn()) smMapFullscreen(); });
@@ -1482,5 +1844,7 @@ if (URL_NODE) {
 if (!['local', 'all'].includes(ACTIVE_NODE) && !NODES.some(n => n.id === ACTIVE_NODE)) ACTIVE_NODE = 'local';
 smSelectNode(ACTIVE_NODE);
 smLoadAppAudit();
+const URL_IP = new URLSearchParams(location.search).get('ip');   // deep link: /security?ip=1.2.3.4
+if (URL_IP) smInvestigate(URL_IP);
 </script>
 {% endblock %}

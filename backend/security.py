@@ -26,6 +26,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import unquote_plus
 
@@ -696,6 +697,7 @@ def get_overview(node_id: str = "local", lines: int = 5000) -> dict:
             if hit and time.monotonic() - hit[0] < _CACHE_TTL:
                 return hit[1]
         access, errors, meta = _collect(node_id, lines)
+        _remember_raw((node_id, lines), access, errors, meta)
         result = analyze(access, errors)
         stats = {n["name"]: n for n in result["nodes"]}
         empty = {"requests": 0, "threats": 0, "blocked": 0, "served": 0, "critical": 0, "high": 0,
@@ -708,6 +710,429 @@ def get_overview(node_id: str = "local", lines: int = 5000) -> dict:
             for k in [k for k, v in _cache.items() if time.monotonic() - v[0] > 60]:
                 _cache.pop(k, None)
         return result
+
+
+# ── IP investigation ──────────────────────────────────────────────────────────
+# Reconstructs everything one source IP did from the raw logs: what it asked
+# for, in which order (grouped into an attack "story"), which kill-chain
+# phases it reached, what the server answered, and which of those answers
+# deserve a human look (payloads that got a 2xx, files that may have leaked,
+# a login that succeeded after a run of failures …).
+
+_raw_cache: dict = {}            # (node, lines) → (monotonic, access, errors, meta)
+_RAW_TTL = 30.0
+_RAW_MAX = 3
+_raw_lock = threading.Lock()
+
+
+def _remember_raw(key, access, errors, meta):
+    with _raw_lock:
+        _raw_cache[key] = (time.monotonic(), access, errors, meta)
+        while len(_raw_cache) > _RAW_MAX:
+            _raw_cache.pop(min(_raw_cache, key=lambda k: _raw_cache[k][0]))
+
+
+def _raw_entries(node_id: str, lines: int):
+    """Raw parsed entries for a scope, reusing what the live dashboard just
+    read when possible (an investigation opened from the dashboard then costs
+    no extra log read / SSH round)."""
+    now = time.monotonic()
+    with _raw_lock:
+        best = None
+        for (n, ln), v in _raw_cache.items():
+            if n == node_id and ln >= lines and now - v[0] < _RAW_TTL and (best is None or ln < best[0]):
+                best = (ln, v)
+        if best:
+            return best[1][1], best[1][2], best[1][3]
+    access, errors, meta = _collect(node_id, lines)
+    _remember_raw((node_id, lines), access, errors, meta)
+    return access, errors, meta
+
+
+PHASES = [
+    ("recon", "Reconnaissance", "Mapping the target: scanners, admin-panel / CMS probes, 404 enumeration, unusual methods",
+     {"scanner", "cms_probe", "enumeration", "bad_method", "protocol"}),
+    ("discovery", "Sensitive data hunting", "Looking for secrets and config files, or reading files via path traversal",
+     {"sensitive", "traversal"}),
+    ("exploit", "Exploitation attempts", "Injection payloads: SQLi, XSS, command injection, Log4Shell, Shellshock, SSRF",
+     {"sqli", "xss", "rce", "log4shell", "shellshock", "ssrf"}),
+    ("credential", "Credential attack", "Login attempts / password guessing",
+     {"brute_force"}),
+    ("impact", "Disruption", "Request flood that can degrade the service",
+     {"flood"}),
+]
+_PHASE_OF = {c: pid for pid, _label, _desc, cats in PHASES for c in cats}
+_SCANNER_RX = next(rx for sid, _l, _s, _f, rx in _COMPILED if sid == "scanner")
+_EXPLOIT_CATS = {"sqli", "xss", "rce", "log4shell", "shellshock", "ssrf"}
+_DATA_CATS = {"sensitive", "traversal"}
+_RUN_GAP = 300          # requests further apart than this start a new story step
+_SESSION_GAP = 1800     # … and a new session after 30 min of silence
+_HIST_BINS = 60
+
+_dns_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="rdns")
+
+
+@lru_cache(maxsize=4096)
+def _rdns_cached(ip: str) -> str | None:
+    import socket
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except (OSError, UnicodeError):
+        return None
+
+
+def _rdns(ip: str, timeout: float = 1.5) -> str | None:
+    """Reverse DNS often names the actor outright (*.shodan.io, *.censys-
+    scanner.com, cloud providers) — bounded so a dead resolver can't stall."""
+    try:
+        return _dns_pool.submit(_rdns_cached, ip).result(timeout=timeout)
+    except Exception:
+        return None
+
+
+def _req_view(e: dict, cats: list) -> dict:
+    status = int(e.get("status") or 0)
+    return {
+        "dt_iso": e.get("dt_iso") or "", "node": e.get("node"),
+        "method": (e.get("method") or "-")[:16], "path": (e.get("path") or "")[:500],
+        "status": status, "bytes": int(e.get("bytes") or 0),
+        "ua": (e.get("ua") or "")[:300], "referer": (e.get("referer") or "")[:300],
+        "cats": cats, "severity": _max_severity(cats) if cats else "info",
+        "outcome": _outcome(status),
+    }
+
+
+def _action(r: dict) -> tuple[str, str]:
+    """→ (label, phase) describing what one request was trying to do."""
+    if r["cats"]:
+        # Name the action by what was requested; the scanner UA only says
+        # which tool did it.
+        pool = [c for c in r["cats"] if c != "scanner"] or r["cats"]
+        top = max(pool, key=lambda c: SEVERITY_RANK[CATEGORY_META[c]["severity"]])
+        return CATEGORY_META[top]["label"], _PHASE_OF.get(top, "recon")
+    if r["method"].upper() == "POST" and _AUTH_PATH_RE.search(r["path"]):
+        return "Login attempt", "credential"
+    if r["status"] == 404:
+        return "Requested missing page (404)", "browse"
+    if r["status"] in BLOCKED_STATUSES:
+        return "Blocked request", "browse"
+    return "Normal browsing", "browse"
+
+
+def _hist(reqs: list, t0: float, t1: float) -> dict:
+    span = max(t1 - t0, 1.0)
+    step = max(1, int(-(-span // _HIST_BINS)))   # ceil, ≥1 s
+    n = min(_HIST_BINS, int(span // step) + 1)
+    bins = [{"total": 0, "threats": 0, "blocked": 0} for _ in range(n)]
+    for r in reqs:
+        if r["_ts"] is None:
+            continue
+        b = bins[min(n - 1, int((r["_ts"] - t0) // step))]
+        b["total"] += 1
+        b["threats"] += bool(r["cats"])
+        b["blocked"] += r["outcome"] == "blocked"
+    return {"start": datetime.fromtimestamp(t0, tz=timezone.utc).isoformat(), "bin_seconds": step, "bins": bins}
+
+
+def investigate(ip: str, node_id: str = "local", lines: int = 20000) -> dict:
+    """Full activity report for one source IP within the last `lines` log
+    lines of the scope (local / node / all)."""
+    ip = str(ipaddress.ip_address(ip.strip()))     # ValueError on garbage
+    lines = max(200, min(int(lines), 50000))
+    access, errors, meta = _raw_entries(node_id, lines)
+
+    mine = [e for e in access if not e.get("unparsed") and e.get("ip") == ip]
+    scanned = sum(1 for e in access if not e.get("unparsed"))
+    window = sorted(e.get("dt_iso") for e in access if e.get("dt_iso"))
+    ip_err_rx = re.compile(r"client:\s*" + re.escape(ip) + r"(?![\d.:a-fA-F])")
+    my_errors = [e for e in errors if not e.get("unparsed") and ip_err_rx.search(e.get("message") or "")]
+
+    g = geoip.lookup(ip)
+    geo = dict(g) if g else None
+    if geo and geo.get("cc") == "LA" and geo.get("lat") is not None:
+        iso = laos.province_of(round(geo["lat"], 3), round(geo["lon"], 3), geo.get("region") or "")
+        geo["province"] = iso
+        geo["province_name"] = laos.PROVINCES.get(iso, ("", ""))[0] if iso else None
+        geo["province_name_lo"] = laos.PROVINCES.get(iso, ("", ""))[1] if iso else None
+
+    base = {
+        "ip": ip, "node": node_id, "lines_scanned": scanned,
+        "window": {"from": window[0] if window else None, "to": window[-1] if window else None},
+        "unreachable": [{"name": m["name"], "error": m["error"]} for m in meta if not m["reachable"]],
+        "profile": {"internal": _is_internal(ip), "trusted": _is_trusted(ip), "geo": geo,
+                    "rdns": _rdns(ip), "internal_hint": _INTERNAL_HINT if _is_internal(ip) else None},
+        "error_lines": [{"dt_iso": e.get("dt_iso"), "level": e.get("level"), "node": e.get("node"),
+                         "message": (e.get("message") or "")[:400]} for e in my_errors[-100:]][::-1],
+        "found": bool(mine),
+    }
+    if not mine:
+        base["verdict"] = {"level": "info", "actor": "Not seen",
+                           "summary": f"No requests from {ip} in the last {scanned:,} log lines of this scope. "
+                                      "Try a deeper search or the All Nodes scope."}
+        return base
+
+    # Per-request view, chronological -----------------------------------------
+    reqs = []
+    for e in mine:
+        r = _req_view(e, classify(e))
+        dt = _parse_dt(r["dt_iso"])
+        r["_ts"] = dt.timestamp() if dt else None
+        r["action"], r["phase"] = _action(r)
+        reqs.append(r)
+    reqs.sort(key=lambda r: (r["_ts"] is None, r["_ts"] or 0))
+
+    # Reuse the dashboard scorer on this IP alone (same score/behaviours).
+    a = analyze(mine, my_errors)
+    att = next((x for x in a["attackers"] if x["ip"] == ip), None)
+    behaviors = [b for b in a["behaviors"] if b["ip"] == ip]
+    cat_counts = Counter(c for r in reqs for c in r["cats"])
+    for b in behaviors:
+        if not b["internal"]:
+            cat_counts[b["type"]] += 1
+
+    ts = [r["_ts"] for r in reqs if r["_ts"] is not None]
+    t0, t1 = (min(ts), max(ts)) if ts else (0.0, 0.0)
+    duration = t1 - t0
+    threats = [r for r in reqs if r["cats"]]
+    served_threats = [r for r in threats if r["outcome"] == "served"]
+    statuses = Counter(r["status"] for r in reqs)
+    uas = Counter(r["ua"] or "-" for r in reqs)
+    tools = sorted({m.group(0).lower() for u in uas for m in [_SCANNER_RX.search(u)] if m})
+    paths = Counter(r["path"].split("?", 1)[0] for r in reqs)
+    nodes = Counter(r["node"] or "Local" for r in reqs)
+
+    stats = {
+        "requests": len(reqs), "threats": len(threats), "served_threats": len(served_threats),
+        "blocked": sum(r["outcome"] == "blocked" for r in reqs),
+        "failed": sum(r["outcome"] == "failed" for r in reqs),
+        "first_seen": reqs[0]["dt_iso"], "last_seen": max(r["dt_iso"] for r in reqs),
+        "duration_s": int(duration), "peak_rpm": att["peak_rpm"] if att else _peak_per_minute(ts),
+        "avg_rpm": round(len(ts) / max(duration / 60, 1), 1) if ts else 0,
+        "unique_paths": len(paths), "bytes": sum(r["bytes"] for r in reqs),
+        "status_classes": {f"{k}xx": sum(n for s, n in statuses.items() if s // 100 == k) for k in (2, 3, 4, 5)},
+        "statuses": [{"code": s, "count": n} for s, n in statuses.most_common(12)],
+        "methods": [{"method": m, "count": n} for m, n in Counter(r["method"] for r in reqs).most_common(8)],
+        "user_agents": [{"ua": u, "count": n, "tool": (lambda m: m.group(0) if m else None)(_SCANNER_RX.search(u))}
+                        for u, n in uas.most_common(10)],
+        "distinct_user_agents": len(uas),
+        "referers": [{"referer": r_, "count": n} for r_, n in
+                     Counter(r["referer"] for r in reqs if r["referer"] not in ("", "-")).most_common(6)],
+        "nodes": [{"name": k, "count": n} for k, n in nodes.most_common()],
+    }
+
+    # Kill-chain phases -------------------------------------------------------
+    phases = []
+    for pid, label, desc, cats in PHASES:
+        hits = [r for r in reqs if any(_PHASE_OF.get(c) == pid for c in r["cats"])]
+        beh = [b for b in behaviors if b["type"] in cats and not b["internal"]]
+        if pid == "credential":
+            hits = [r for r in reqs if r["action"] == "Login attempt" or "brute_force" in r["cats"]]
+        reached = bool(hits) and (pid != "credential" or bool(beh) or len(hits) >= 3) or bool(beh)
+        phases.append({
+            "id": pid, "label": label, "desc": desc, "reached": reached, "count": len(hits),
+            "first": hits[0]["dt_iso"] if hits else None, "last": hits[-1]["dt_iso"] if hits else None,
+            "served": sum(r["outcome"] == "served" for r in hits),
+            "categories": sorted({c for r in hits for c in r["cats"] if c in cats} | {b["type"] for b in beh}),
+        })
+
+    # Story: consecutive requests doing the same thing, merged ---------------
+    runs = []
+    for r in reqs:
+        cur = runs[-1] if runs else None
+        if (cur and cur["action"] == r["action"] and r["_ts"] is not None and cur["_t1"] is not None
+                and r["_ts"] - cur["_t1"] <= _RUN_GAP and (r["node"] == cur["node"])):
+            cur["count"] += 1
+            cur["end"] = r["dt_iso"]
+            cur["_t1"] = r["_ts"]
+        else:
+            cur = {"action": r["action"], "phase": r["phase"], "severity": r["severity"], "node": r["node"],
+                   "start": r["dt_iso"], "end": r["dt_iso"], "_t1": r["_ts"], "count": 1,
+                   "statuses": Counter(), "outcomes": Counter(), "methods": Counter(), "samples": [], "cats": set()}
+            runs.append(cur)
+        cur["statuses"][r["status"]] += 1
+        cur["outcomes"][r["outcome"]] += 1
+        cur["methods"][r["method"]] += 1
+        cur["cats"].update(r["cats"])
+        if SEVERITY_RANK[r["severity"]] > SEVERITY_RANK[cur["severity"]]:
+            cur["severity"] = r["severity"]
+        p = r["path"][:200]
+        if p not in cur["samples"] and len(cur["samples"]) < 6:
+            cur["samples"].append(p)
+    story_total = len(runs)
+    story = [{**{k: v for k, v in x.items() if not k.startswith("_")},
+              "statuses": [{"code": s, "count": n} for s, n in x["statuses"].most_common(4)],
+              "outcomes": dict(x["outcomes"]), "methods": [m for m, _ in x["methods"].most_common(3)],
+              "cats": sorted(x["cats"])} for x in runs[-300:]]
+
+    sessions, cur = [], None
+    for r in reqs:
+        if r["_ts"] is None:
+            continue
+        if cur is None or r["_ts"] - cur["_t1"] > _SESSION_GAP:
+            cur = {"start": r["dt_iso"], "end": r["dt_iso"], "_t1": r["_ts"], "requests": 0, "threats": 0,
+                   "_acts": Counter()}
+            sessions.append(cur)
+        cur["end"], cur["_t1"] = r["dt_iso"], r["_ts"]
+        cur["requests"] += 1
+        cur["threats"] += bool(r["cats"])
+        cur["_acts"][r["action"]] += 1
+    sessions = [{"start": s["start"], "end": s["end"], "requests": s["requests"], "threats": s["threats"],
+                 "actions": [{"action": k, "count": n} for k, n in s["_acts"].most_common(4)]} for s in sessions]
+
+    # Findings: what deserves a human look ------------------------------------
+    findings = []
+
+    def ev(rs, n=6):
+        return [{k: r[k] for k in ("dt_iso", "method", "path", "status", "bytes", "node")} for r in rs[:n]]
+
+    # 2xx on sensitive paths: real leak, or the app's catch-all page? A catch-
+    # all (SPA index, custom 404 with 200) answers different paths with the
+    # same body size.
+    data_hits = [r for r in served_threats if set(r["cats"]) & _DATA_CATS and r["status"] < 300 and r["bytes"] > 0]
+    size_paths = defaultdict(set)
+    for r in data_hits:
+        size_paths[r["bytes"]].add(r["path"])
+    catch_all = {b for b, ps in size_paths.items() if len(ps) >= 3}
+    leaks = [r for r in data_hits if r["bytes"] not in catch_all]
+    fallback = [r for r in data_hits if r["bytes"] in catch_all]
+    if leaks:
+        findings.append({"severity": "critical", "title": "Possible data exposure",
+                         "detail": f"{len(leaks)} request(s) for secrets/config files or traversal targets got a 2xx "
+                                   f"response with content. Open these URLs yourself and check whether real files were served.",
+                         "evidence": ev(leaks)})
+    if fallback:
+        findings.append({"severity": "info", "title": "Sensitive-file probes answered by a catch-all page",
+                         "detail": f"{len(fallback)} probe(s) got 200 with identical body sizes "
+                                   f"({', '.join(f'{b:,} B' for b in sorted(catch_all)[:3])}) — almost certainly the site's "
+                                   "fallback/index page, not the requested files. Returning 404 for these paths is cleaner.",
+                         "evidence": ev(fallback, 3)})
+    exploit_served = [r for r in served_threats if set(r["cats"]) & _EXPLOIT_CATS]
+    if exploit_served:
+        sev = "critical" if any(set(r["cats"]) & {"rce", "log4shell", "shellshock"} for r in exploit_served) else "high"
+        findings.append({"severity": sev, "title": "Injection payloads reached the application",
+                         "detail": f"{len(exploit_served)} exploit request(s) were answered with 2xx/3xx, so they were "
+                                   "processed by the app rather than rejected. Usually harmless (parameter ignored), "
+                                   "but confirm those endpoints validate input.",
+                         "evidence": ev(exploit_served)})
+    err5 = [r for r in threats if r["status"] >= 500]
+    if err5:
+        findings.append({"severity": "medium", "title": "Malicious input caused server errors",
+                         "detail": f"{len(err5)} attack request(s) triggered 5xx. A crash on crafted input can mean the "
+                                   "payload reached a query or interpreter — check the application error logs at these times.",
+                         "evidence": ev(err5)})
+    fails, login_hit, login_total = 0, None, 0
+    for r in reqs:
+        if r["action"] != "Login attempt" and "brute_force" not in r["cats"]:
+            continue
+        login_total += 1
+        if r["status"] in (401, 403, 429):
+            fails += 1
+        elif r["status"] < 400 and fails >= 3:
+            login_hit = (r, fails)
+    if login_hit:
+        r, n = login_hit
+        after = [x for x in reqs if x["dt_iso"] > r["dt_iso"] and x["action"] != "Login attempt"]
+        then = (" Afterwards it requested: " + ", ".join(dict.fromkeys(x["path"].split("?", 1)[0] for x in after[:40]))
+                if after else "")
+        findings.append({"severity": "critical", "title": "Login may have succeeded after repeated failures",
+                         "detail": f"After {n} failed login responses, {r['method']} {r['path'][:120]} returned {r['status']}.{then[:400]}{'.' if then else ''} "
+                                   "If that is a real login, treat the account as compromised: rotate its password and review its sessions.",
+                         "evidence": ev([r] + after, 8)})
+    for b in behaviors:
+        findings.append({"severity": b["severity"], "title": CATEGORY_META.get(b["type"], {}).get("label", b["type"]),
+                         "detail": b["detail"], "evidence": []})
+    if tools:
+        findings.append({"severity": "medium", "title": "Automated attack tool identified",
+                         "detail": "User-Agent names: " + ", ".join(tools) + ". (Determined attackers fake this header, "
+                                                                            "so its absence proves nothing.)", "evidence": []})
+    if stats["distinct_user_agents"] >= 5 and len(reqs) >= 20:
+        findings.append({"severity": "medium", "title": "User-Agent rotation",
+                         "detail": f"{stats['distinct_user_agents']} different User-Agents from one IP — typical of bots "
+                                   "evading UA-based filters (or many users behind one NAT/proxy).", "evidence": []})
+    if len(nodes) > 1:
+        findings.append({"severity": "info", "title": "Seen on several servers",
+                         "detail": "Requests reached " + ", ".join(f"{k} ({n})" for k, n in nodes.most_common()) + ".",
+                         "evidence": []})
+    if threats and not served_threats and not err5:
+        findings.append({"severity": "info", "title": "No attack was served",
+                         "detail": f"All {len(threats)} malicious request(s) were blocked or failed (4xx).", "evidence": []})
+    findings.sort(key=lambda f: -SEVERITY_RANK[f["severity"]])
+
+    # Verdict -----------------------------------------------------------------
+    reached = [p for p in phases if p["reached"]]
+    ratio = len(threats) / len(reqs)
+    if _is_trusted(ip):
+        actor = "Trusted network (SECURITY_TRUSTED_IPS)"
+    elif _is_internal(ip):
+        actor = "Internal / infrastructure address"
+    elif tools:
+        actor = f"Automated scanner ({', '.join(tools[:2])})"
+    elif any(p["id"] == "credential" and p["reached"] for p in phases) and "brute_force" in cat_counts:
+        actor = "Password-guessing bot"
+    elif threats and (ratio >= 0.6 or stats["peak_rpm"] >= 30):
+        actor = "Automated attack bot"
+    elif threats:
+        actor = "Mostly normal client with some suspicious requests"
+    else:
+        actor = "Normal client"
+    level = att["risk"] if att else "info"
+    if any(f["severity"] == "critical" for f in findings) and level not in ("critical",):
+        level = "high" if level in ("info", "low", "medium") else level
+    dur = (f"{duration / 3600:.1f} h" if duration >= 3600 else f"{int(duration // 60)} min" if duration >= 60
+           else f"{int(duration)} s")
+    summary = (f"{len(reqs):,} request(s) over {dur}"
+               + (f", {len(threats):,} malicious ({ratio:.0%})" if threats else ", none matched an attack signature")
+               + (f", {login_total} login attempt(s) ({fails} failed)" if login_total else "") + ". "
+               + (f"Reached: {' → '.join(p['label'] for p in reached)}. " if reached else "")
+               + (f"{len(served_threats)} malicious request(s) were served — see findings."
+                  if served_threats else "Nothing malicious was served." if threats else ""))
+
+    recs = []
+    if not _is_internal(ip) and threats:
+        recs.append(f"Block it: add `deny {ip};` (Blocklist button) or block at the firewall/Cloudflare.")
+    if _is_internal(ip) and len(reqs) >= 100:
+        recs.append("This is an internal address — if it is a proxy/LB, configure `set_real_ip_from` + "
+                    "`real_ip_header` so nginx logs the real client IPs.")
+    if leaks:
+        recs.append("Verify the possibly exposed files; if real, remove them from the web root, rotate any secrets "
+                    "inside, and add `location ~ /\\. { deny all; }`.")
+    if login_hit or "brute_force" in cat_counts:
+        recs.append("Add `limit_req` on login endpoints and enable account lockout / MFA in the application.")
+    if exploit_served or err5:
+        recs.append("Review the application logs for the evidence timestamps and confirm input validation on those endpoints.")
+    if "flood" in cat_counts:
+        recs.append("Add `limit_req zone=... burst=...` for this server and consider Cloudflare rate limiting.")
+    if tools or "scanner" in cat_counts:
+        recs.append("Scanners re-visit: consider a WAF rule / fail2ban jail for known scanner signatures.")
+
+    histogram = _hist(reqs, t0, t1) if ts else None
+    for r in reqs:
+        r.pop("_ts", None)
+    base.update({
+        "risk": ({"score": att["score"], "risk": att["risk"]} if att else {"score": 0, "risk": "info"}),
+        "categories": [{"id": c, "label": CATEGORY_META[c]["label"], "severity": CATEGORY_META[c]["severity"],
+                        "count": n} for c, n in cat_counts.most_common()],
+        "verdict": {"level": level, "actor": actor, "summary": summary},
+        "stats": stats, "phases": phases, "findings": findings, "behaviors": behaviors,
+        "story": story, "story_total": story_total, "sessions": sessions[-50:][::-1], "sessions_total": len(sessions),
+        "histogram": histogram,
+        "top_paths": [{"path": p, "count": n} for p, n in paths.most_common(25)],
+        "requests": reqs[::-1][:1500], "requests_total": len(reqs),
+        "recommendations": recs,
+    })
+    tp = {}
+    for r in reqs:
+        k = r["path"].split("?", 1)[0]
+        t = tp.setdefault(k, {"statuses": Counter(), "cats": set(), "methods": set(), "last": ""})
+        t["statuses"][r["status"]] += 1
+        t["cats"].update(r["cats"])
+        t["methods"].add(r["method"])
+        t["last"] = max(t["last"], r["dt_iso"])
+    for row in base["top_paths"]:
+        t = tp[row["path"]]
+        row.update({"statuses": [{"code": s, "count": n} for s, n in t["statuses"].most_common(3)],
+                    "cats": sorted(t["cats"]), "methods": sorted(t["methods"]), "last": t["last"]})
+    return base
 
 
 # ── Hardening audit ───────────────────────────────────────────────────────────
