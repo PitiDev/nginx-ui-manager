@@ -214,6 +214,10 @@ The script builds a `linux/amd64` image, tags it, and pushes both the version ta
 - Viewer role blocks all write operations at the middleware level (not just the UI)
 - Change `SUDO_PASSWORD` after initial setup and rotate `SECRET_KEY` before going to production
 
+### External security audit
+
+The **External Audit** page (`/audit`), backed by [`tools/security_audit/`](tools/security_audit/README.md), is a read-only scanner for your **own** public domains. It can also run as a standalone CLI. It checks for exposed `.env`/`.git` files, missing security headers, and TLS certificate health, and writes JSON and HTML reports with Nginx/Apache fixes. It is rate-limited (2 concurrent connections, 500 ms spacing) and only contacts hosts listed in `authorized_domains.txt`.
+
 ---
 
 ## Tech Stack

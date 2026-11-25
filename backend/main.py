@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from backend import activity, auth, backup, logs, nginx, node_ssh, nodes as node_store, proxy_mgr, security, ssl_mgr, system, system_diagram, tester, traffic
+from backend import activity, auth, backup, ext_audit, logs, nginx, node_ssh, nodes as node_store, proxy_mgr, security, ssl_mgr, system, system_diagram, tester, traffic
 from backend import users as user_store
 
 app = FastAPI(title="Nginx UI")
@@ -884,6 +884,110 @@ def api_test_load(url: str, total: int = 20, concurrency: int = 5):
 @app.get("/api/testing/api-security")
 def api_test_api_security(url: str, method: str = "GET"):
     return JSONResponse(tester.test_api_security(url, method))
+
+
+# ── External Security Audit ───────────────────────────────────────────────────
+# Viewers can read reports; editing scope, running and deleting are admin-only
+# (POSTs are already blocked for viewers by AuthMiddleware; checked again here).
+
+def _is_admin(request: Request) -> bool:
+    return (getattr(request.state, "user", None) or {}).get("role") == "admin"
+
+
+@app.get("/audit", response_class=HTMLResponse)
+def audit_page(request: Request):
+    ctx = {
+        "scope": ext_audit.get_scope(),
+        "settings": ext_audit.get_settings(),
+        "user_agent": ext_audit.user_agent_preview(),
+        "reports": ext_audit.list_reports(),
+        "job": ext_audit.status(),
+        **_flash_ctx(request),
+    }
+    response = tmpl(request, "audit.html", ctx)
+    _clear_flash(response)
+    return response
+
+
+@app.post("/audit/scope")
+def audit_scope_save(
+    request: Request,
+    scope: str = Form(""),
+    contact: str = Form(""),
+    expiry_days: int = Form(30),
+):
+    ok, msg = ext_audit.save_scope(scope, contact, expiry_days)
+    user, role = _actor(request)
+    activity.log(user, role, "audit.scope", detail=msg, ip=_get_ip(request), result="success" if ok else "error")
+    response = RedirectResponse(url="/audit", status_code=302)
+    _set_flash(response, msg, "success" if ok else "error")
+    return response
+
+
+@app.post("/api/audit/run")
+def api_audit_run(request: Request):
+    if not _is_admin(request):
+        return JSONResponse({"ok": False, "msg": "admin only"}, status_code=403)
+    user, role = _actor(request)
+    ok, msg = ext_audit.start_scan(user, role, _get_ip(request))
+    activity.log(user, role, "audit.run", detail=msg, ip=_get_ip(request), result="success" if ok else "error")
+    return JSONResponse({"ok": ok, "msg": msg}, status_code=200 if ok else 409)
+
+
+@app.post("/api/audit/cancel")
+def api_audit_cancel(request: Request):
+    if not _is_admin(request):
+        return JSONResponse({"ok": False, "msg": "admin only"}, status_code=403)
+    return JSONResponse({"ok": ext_audit.cancel_scan()})
+
+
+@app.get("/api/audit/status")
+def api_audit_status():
+    return JSONResponse(ext_audit.status())
+
+
+@app.get("/api/audit/suggest")
+def api_audit_suggest():
+    return JSONResponse({"hosts": ext_audit.suggest_hosts()})
+
+
+@app.get("/api/audit/reports")
+def api_audit_reports():
+    return JSONResponse(ext_audit.list_reports())
+
+
+@app.get("/api/audit/reports/{report_id}")
+def api_audit_report(report_id: str):
+    data = ext_audit.get_report(report_id)
+    if data is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return JSONResponse(data)
+
+
+@app.get("/audit/reports/{report_id}/{fmt}")
+def audit_report_file(report_id: str, fmt: str):
+    path = ext_audit.report_path(report_id, fmt)
+    if path is None:
+        return Response("Not found", status_code=404, media_type="text/plain")
+    if fmt == "json":
+        return Response(path.read_bytes(), media_type="application/json",
+                        headers={"Content-Disposition": f'attachment; filename="{path.name}"'})
+    # Standalone report: self-contained, so lock it down to inline-only resources.
+    return HTMLResponse(path.read_text(encoding="utf-8"), headers={
+        "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+    })
+
+
+@app.post("/audit/reports/{report_id}/delete")
+def audit_report_delete(request: Request, report_id: str):
+    ok, msg = ext_audit.delete_report(report_id)
+    user, role = _actor(request)
+    activity.log(user, role, "audit.delete", target=report_id, detail=msg, ip=_get_ip(request), result="success" if ok else "error")
+    response = RedirectResponse(url="/audit", status_code=302)
+    _set_flash(response, msg, "success" if ok else "error")
+    return response
 
 
 # ── Nodes (Multi-node management) ─────────────────────────────────────────────

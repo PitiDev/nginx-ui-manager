@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Security Posture Report</title>
+<style>
+  :root {
+    --bg: #0a0e15; --surface: #111722; --surface-2: #161d2b; --border: #222b3a; --border-2: #2c3749;
+    --text: #e6e9ef; --muted: #8b97ab; --faint: #5d687b;
+    --crit: #f2555a; --crit-bg: rgba(242,85,90,.12);
+    --med: #f0a63a; --med-bg: rgba(240,166,58,.12);
+    --low: #6aa8f7; --low-bg: rgba(106,168,247,.12);
+    --pass: #3ec98a; --pass-bg: rgba(62,201,138,.11);
+    --accent: #8ab4ff;
+    --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 32px 28px 64px; }
+  a { color: var(--accent); }
+  code, pre { font-family: var(--mono); }
+
+  /* header */
+  header.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-bottom: 28px; }
+  .eyebrow { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 6px 0 8px; font-weight: 650; letter-spacing: -.01em; }
+  .meta { color: var(--muted); font-size: 13px; display: flex; gap: 18px; flex-wrap: wrap; }
+  .meta b { color: var(--text); font-weight: 550; }
+  .posture { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+  .posture .label { font-size: 12px; color: var(--muted); }
+  .posture .value { font-size: 15px; font-weight: 600; }
+
+  /* cards */
+  .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px 16px; position: relative; overflow: hidden; }
+  .card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--c, var(--border-2)); }
+  .card .k { font-size: 12px; color: var(--muted); font-weight: 550; }
+  .card .v { font-size: 34px; font-weight: 650; line-height: 1.1; margin-top: 8px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .card .s { font-size: 12px; color: var(--faint); margin-top: 6px; }
+  .card.crit { --c: var(--crit); } .card.crit .v { color: var(--crit); }
+  .card.warn { --c: var(--med); } .card.warn .v { color: var(--med); }
+  .card.pass { --c: var(--pass); } .card.pass .v { color: var(--pass); }
+  .card.crit.zero .v, .card.warn.zero .v { color: var(--text); }
+  .dist { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin: 16px 0 6px; background: var(--surface-2); gap: 2px; }
+  .dist span { display: block; height: 100%; }
+  .dist-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .dist-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+
+  /* filters */
+  .filters { position: sticky; top: 0; z-index: 5; margin: 28px -28px 18px; padding: 12px 28px; background: rgba(10,14,21,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-2); background: transparent; color: var(--muted); font: 600 12px var(--sans); letter-spacing: .03em; cursor: pointer; }
+  .chip .n { font-variant-numeric: tabular-nums; font-weight: 500; opacity: .8; }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); opacity: .35; }
+  .chip[aria-pressed="true"] { color: var(--text); border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); }
+  .chip[aria-pressed="true"] .dot { opacity: 1; }
+  .chip:focus-visible, select:focus-visible, input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sep { width: 1px; height: 22px; background: var(--border-2); margin: 0 4px; }
+  select, input[type=search] { height: 32px; border-radius: 8px; border: 1px solid var(--border-2); background: var(--surface); color: var(--text); font: 13px var(--sans); padding: 0 10px; }
+  input[type=search] { flex: 1 1 200px; min-width: 160px; }
+  .btn { height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-2); background: var(--surface); color: var(--text); font: 550 12px var(--sans); cursor: pointer; }
+  .btn:hover { border-color: var(--faint); }
+  .shown { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* domain groups */
+  .group { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .group-head { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .group-head h2 { font: 600 15px var(--mono); margin: 0; letter-spacing: -.01em; }
+  .group-head .counts { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+  .count { font: 600 11px var(--sans); padding: 2px 8px; border-radius: 999px; color: var(--c); background: var(--bg-c); font-variant-numeric: tabular-nums; }
+  .count.zero { color: var(--faint); background: transparent; border: 1px solid var(--border); }
+  .group-head .dur { font-size: 12px; color: var(--faint); }
+  .notes { padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 12.5px; color: var(--muted); }
+  .notes div + div { margin-top: 4px; }
+  .notes div::before { content: "ⓘ"; margin-right: 8px; color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding: 10px 18px; border-bottom: 1px solid var(--border); }
+  td { padding: 12px 18px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child > td { border-bottom: 0; }
+  tr.f:hover > td { background: rgba(255,255,255,.015); }
+  tr.f.pass td:not(:first-child) { color: var(--muted); }
+  .col-sev { width: 112px; } .col-cat { width: 150px; } .col-st { width: 74px; text-align: right; } .col-act { width: 92px; text-align: right; }
+  .title { font-weight: 600; }
+  .check { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 1px; word-break: break-all; }
+  .detail { margin-top: 4px; color: var(--muted); font-size: 13px; }
+  .cat { color: var(--muted); font-size: 13px; }
+  .st { font: 12px var(--mono); color: var(--muted); }
+
+  .badge { display: inline-flex; align-items: center; gap: 6px; font: 700 10.5px var(--sans); letter-spacing: .07em; padding: 4px 8px; border-radius: 6px; color: var(--c); background: var(--bg-c); border: 1px solid color-mix(in srgb, var(--c) 30%, transparent); }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+  .CRITICAL { --c: var(--crit); --bg-c: var(--crit-bg); }
+  .MEDIUM { --c: var(--med); --bg-c: var(--med-bg); }
+  .LOW { --c: var(--low); --bg-c: var(--low-bg); }
+  .PASS { --c: var(--pass); --bg-c: var(--pass-bg); }
+
+  .fix-btn { font: 600 12px var(--sans); color: var(--accent); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; cursor: pointer; white-space: nowrap; }
+  .fix-btn:hover { border-color: var(--border-2); }
+  .fix-btn .chev { display: inline-block; transition: transform .15s; margin-left: 4px; }
+  .fix-btn[aria-expanded="true"] .chev { transform: rotate(90deg); }
+
+  tr.fix > td { background: var(--surface-2); padding: 18px 18px 20px; }
+  .fix-inner { border-left: 2px solid var(--c); padding-left: 16px; max-width: 980px; }
+  .fix-sum { font-weight: 550; margin: 0 0 10px; }
+  .fix-inner ol { margin: 0 0 14px; padding-left: 20px; color: var(--text); }
+  .fix-inner li { margin: 4px 0; }
+  .fix-inner li code, .fix-note code { background: var(--bg); border: 1px solid var(--border); padding: 0 5px; border-radius: 4px; font-size: 12px; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border-2); }
+  .tab { font: 600 12px var(--sans); color: var(--muted); padding: 8px 14px; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+  .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+  .code { position: relative; }
+  .code pre { margin: 0; padding: 14px 16px; background: var(--bg); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 8px 8px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; color: #d4dae5; }
+  .copy { position: absolute; top: 8px; right: 8px; font: 600 11px var(--sans); color: var(--muted); background: var(--surface-2); border: 1px solid var(--border-2); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+  .copy:hover { color: var(--text); }
+  .fix-note { margin-top: 12px; font-size: 12.5px; color: var(--muted); padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: rgba(240,166,58,.05); }
+  .ev { margin-top: 12px; font-size: 12px; color: var(--faint); font-family: var(--mono); word-break: break-all; }
+
+  .empty { text-align: center; padding: 48px 20px; color: var(--muted); border: 1px dashed var(--border-2); border-radius: 12px; }
+  footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--faint); font-size: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+  footer h3 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  footer p { margin: 0; }
+
+  @media (max-width: 900px) {
+    .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .col-cat, td.cat { display: none; }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 20px 14px 48px; } .filters { margin: 20px -14px 14px; padding: 10px 14px; }
+    .col-st, td.st { display: none; } td, th { padding-left: 12px; padding-right: 12px; }
+  }
+  @media print {
+    .filters, .fix-btn, .copy { display: none !important; }
+    body { background: #fff; color: #111; } .group, .card { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Internal security audit · Confidential</div>
+      <h1>Security Posture Report</h1>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="posture" id="posture"></div>
+  </header>
+
+  <section class="cards" id="cards" aria-label="Summary"></section>
+  <div class="dist" id="dist" aria-hidden="true"></div>
+  <div class="dist-legend" id="dist-legend"></div>
+
+  <div class="filters" role="search">
+    <div id="sev-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <span class="sep"></span>
+    <select id="f-domain" aria-label="Filter by domain"><option value="">All domains</option></select>
+    <select id="f-cat" aria-label="Filter by category"><option value="">All categories</option></select>
+    <input id="f-q" type="search" placeholder="Search findings, paths, headers…" aria-label="Search findings">
+    <button class="btn" id="expand-all" type="button">Expand all fixes</button>
+    <span class="shown" id="shown"></span>
+  </div>
+
+  <main id="groups"></main>
+
+  <footer>
+    <div><h3>Scope</h3><p id="scope-text"></p></div>
+    <div><h3>Method</h3><p>Read-only GET requests and TLS handshakes. Max 2 concurrent connections, ≥500 ms between requests, 10 s timeout. Redirects followed only to listed hosts.</p></div>
+    <div><h3>Data safety</h3><p>Response bodies are inspected in memory to confirm exposure and then discarded. This report records paths, status codes, severities and line counts only, never secret values.</p></div>
+  </footer>
+</div>
+
+<script id="report-data" type="application/json">__REPORT_JSON__</script>
+<script>
+(function () {
+  "use strict";
+  const R = JSON.parse(document.getElementById("report-data").textContent);
+  const SEVS = ["CRITICAL", "MEDIUM", "LOW", "PASS"];
+  const S = R.summary;
+
+  function h(tag, attrs, ...kids) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === "class") el.className = v;
+      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+    return el;
+  }
+  // Render `code` spans in plain-text strings without using innerHTML.
+  function richText(str) {
+    const out = []; const re = /`([^`]+)`/g; let last = 0, m;
+    while ((m = re.exec(str))) { out.push(str.slice(last, m.index), h("code", null, m[1])); last = re.lastIndex; }
+    out.push(str.slice(last)); return out;
+  }
+  const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); };
+  const badge = (sev) => h("span", { class: "badge " + sev }, sev);
+
+  // ---- header
+  const meta = document.getElementById("meta");
+  meta.append(
+    h("span", null, "Generated ", h("b", null, fmtDate(R.generated_at))),
+    h("span", null, "Duration ", h("b", null, R.duration_seconds + "s")),
+    h("span", null, "Requests ", h("b", null, R.request_count)),
+    h("span", null, R.tool.name + " " + R.tool.version)
+  );
+  const worst = SEVS.find((s) => R.domains.some((d) => d.worst === s)) || "PASS";
+  const postureText = { CRITICAL: "Action required", MEDIUM: "Needs attention", LOW: "Minor gaps", PASS: "Healthy" }[worst];
+  document.getElementById("posture").append(
+    h("div", null, h("div", { class: "label" }, "Overall posture"), h("div", { class: "value" }, postureText)),
+    badge(worst)
+  );
+  document.getElementById("scope-text").textContent =
+    R.domains.length + " host(s) from " + R.scope.source + ". Hosts not on this list were never contacted.";
+
+  // ---- cards
+  const card = (cls, k, v, s) => h("div", { class: "card " + cls + (v === 0 ? " zero" : "") }, h("div", { class: "k" }, k), h("div", { class: "v" }, v), h("div", { class: "s" }, s));
+  document.getElementById("cards").append(
+    card("", "Total Domains Scanned", S.total_domains, S.total_checks + " checks run"),
+    card("crit", "Critical Issues", S.critical, S.domains_with_critical ? S.domains_with_critical + " domain(s) affected" : "None found"),
+    card("warn", "Warnings", S.warnings, S.medium + " medium · " + S.low + " low"),
+    card("pass", "Passed Checks", S.passed, S.total_checks ? Math.round((S.passed / S.total_checks) * 100) + "% of all checks" : "—")
+  );
+  const tot = { CRITICAL: S.critical, MEDIUM: S.medium, LOW: S.low, PASS: S.passed };
+  const colors = { CRITICAL: "var(--crit)", MEDIUM: "var(--med)", LOW: "var(--low)", PASS: "var(--pass)" };
+  const dist = document.getElementById("dist"), legend = document.getElementById("dist-legend");
+  SEVS.forEach((s) => {
+    if (tot[s]) dist.append(h("span", { style: "flex:" + tot[s] + ";background:" + colors[s], title: s + ": " + tot[s] }));
+    legend.append(h("span", null, h("i", { style: "background:" + colors[s] }), s.charAt(0) + s.slice(1).toLowerCase() + " " + tot[s]));
+  });
+
+  // ---- filter state
+  const state = { sev: new Set(SEVS), domain: "", cat: "", q: "" };
+  const open = new Set();
+  const chips = document.getElementById("sev-chips");
+  SEVS.forEach((s) => {
+    chips.append(h("button", {
+      class: "chip " + s, type: "button", "aria-pressed": "true",
+      onclick: (e) => { const b = e.currentTarget; const on = b.getAttribute("aria-pressed") !== "true";
+        b.setAttribute("aria-pressed", String(on)); on ? state.sev.add(s) : state.sev.delete(s); render(); }
+    }, h("span", { class: "dot" }), s, h("span", { class: "n" }, tot[s])));
+  });
+  const fDomain = document.getElementById("f-domain"), fCat = document.getElementById("f-cat"), fQ = document.getElementById("f-q");
+  R.domains.forEach((d) => fDomain.append(h("option", { value: d.domain }, d.domain)));
+  [...new Set(R.domains.flatMap((d) => d.findings.map((f) => f.category)))].sort().forEach((c) => fCat.append(h("option", { value: c }, c)));
+  fDomain.onchange = () => { state.domain = fDomain.value; render(); };
+  fCat.onchange = () => { state.cat = fCat.value; render(); };
+  fQ.oninput = () => { state.q = fQ.value.trim().toLowerCase(); render(); };
+  document.getElementById("expand-all").onclick = (e) => {
+    const keys = []; R.domains.forEach((d) => d.findings.forEach((f, i) => { if (f.remediation) keys.push(d.domain + "#" + i); }));
+    const all = keys.every((k) => open.has(k));
+    keys.forEach((k) => (all ? open.delete(k) : open.add(k)));
+    e.currentTarget.textContent = all ? "Expand all fixes" : "Collapse all fixes";
+    render();
+  };
+
+  const matches = (d, f) => state.sev.has(f.severity) && (!state.cat || f.category === state.cat) &&
+    (!state.q || [d.domain, f.title, f.check, f.detail, f.url, f.category, String(f.http_status || "")].join(" ").toLowerCase().includes(state.q));
+
+  function fixPanel(f) {
+    const r = f.remediation;
+    const langs = Object.keys(r.snippets || {});
+    const wrap = h("div", { class: "fix-inner " + f.severity },
+      h("p", { class: "fix-sum" }, r.summary),
+      r.steps.length ? h("ol", null, r.steps.map((s) => h("li", null, richText(s)))) : null);
+    if (langs.length) {
+      const pre = h("pre"); const codeBox = h("div", { class: "code" }, pre);
+      const tabs = h("div", { class: "tabs", role: "tablist" });
+      const show = (lang) => {
+        pre.textContent = r.snippets[lang];
+        tabs.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.lang === lang)));
+      };
+      langs.forEach((lang) => tabs.append(h("button", { class: "tab", type: "button", role: "tab", "data-lang": lang, onclick: () => show(lang) },
+        lang === "nginx" ? "Nginx" : lang === "apache" ? "Apache" : lang)));
+      codeBox.append(h("button", { class: "copy", type: "button", onclick: (e) => {
+        const btn = e.currentTarget; const txt = pre.textContent;
+        const done = () => { btn.textContent = "Copied"; setTimeout(() => (btn.textContent = "Copy"), 1400); };
+        if (navigator.clipboard) navigator.clipboard.writeText(txt).then(done, () => {}); else done();
+      } }, "Copy"));
+      wrap.append(tabs, codeBox); show(langs[0]);
+    }
+    if (r.note) wrap.append(h("div", { class: "fix-note" }, richText(r.note)));
+    return wrap;
+  }
+
+  function evidenceLine(f) {
+    const ev = f.evidence || {}; const parts = [];
+    for (const [k, v] of Object.entries(ev)) if (v != null && v !== "") parts.push(k + "=" + (typeof v === "object" ? JSON.stringify(v) : v));
+    return parts.length ? h("div", { class: "ev" }, parts.join("  ·  ")) : null;
+  }
+
+  function render() {
+    const root = document.getElementById("groups"); root.replaceChildren();
+    let shown = 0, total = 0;
+    R.domains.forEach((d) => {
+      total += d.findings.length;
+      if (state.domain && d.domain !== state.domain) return;
+      const rows = [];
+      d.findings.forEach((f, i) => {
+        if (!matches(d, f)) return;
+        shown++;
+        const key = d.domain + "#" + i, isOpen = open.has(key);
+        const btn = f.remediation ? h("button", { class: "fix-btn", type: "button", "aria-expanded": String(isOpen),
+          onclick: () => { isOpen ? open.delete(key) : open.add(key); render(); } }, "How to fix", h("span", { class: "chev" }, "›")) : null;
+        rows.push(h("tr", { class: "f " + f.severity.toLowerCase() },
+          h("td", null, badge(f.severity)),
+          h("td", { class: "cat" }, f.category),
+          h("td", null,
+            h("div", { class: "title" }, f.title),
+            h("div", { class: "check" }, f.url ? f.check + " — " + f.url : f.check),
+            f.detail ? h("div", { class: "detail" }, f.detail) : null),
+          h("td", { class: "st col-st" }, f.http_status != null ? f.http_status : "—"),
+          h("td", { class: "col-act" }, btn)));
+        if (isOpen && f.remediation) rows.push(h("tr", { class: "fix" }, h("td", { colspan: "5" }, fixPanel(f), evidenceLine(f))));
+      });
+      if (!rows.length) return;
+      const counts = h("div", { class: "counts" }, SEVS.map((s) =>
+        h("span", { class: "count " + s + (d.counts[s] ? "" : " zero"), title: s }, d.counts[s] + " " + s.toLowerCase())));
+      root.append(h("section", { class: "group", id: "d-" + d.domain },
+        h("div", { class: "group-head" }, badge(d.worst), h("h2", null, d.domain), counts, h("span", { class: "dur" }, d.duration_seconds + "s")),
+        d.notes.length ? h("div", { class: "notes" }, d.notes.map((n) => h("div", null, n))) : null,
+        h("table", null,
+          h("thead", null, h("tr", null, h("th", { class: "col-sev" }, "Severity"), h("th", { class: "col-cat" }, "Category"),
+            h("th", null, "Finding"), h("th", { class: "col-st" }, "HTTP"), h("th", { class: "col-act" }, ""))),
+          h("tbody", null, rows))));
+    });
+    if (!shown) root.append(h("div", { class: "empty" }, "No findings match the current filters."));
+    document.getElementById("shown").textContent = "Showing " + shown + " of " + total;
+  }
+  render();
+})();
+</script>
+</body>
+</html>

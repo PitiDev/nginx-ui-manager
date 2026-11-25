@@ -7,3 +7,5 @@ venv/
 .claude/
 requiment.txt
 geoip/
+tools/security_audit/reports/
+tools/security_audit/test_audit.py

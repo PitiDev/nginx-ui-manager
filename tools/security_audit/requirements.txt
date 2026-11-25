@@ -1,0 +1,5 @@
+# Security audit CLI — standalone; independent of the nginx_ui web app deps.
+requests>=2.31,<3
+# Used only to read expiry/issuer from certificates that FAIL validation
+# (expired, self-signed, mismatched). Optional: omit and those details are skipped.
+cryptography>=41

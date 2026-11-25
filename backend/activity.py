@@ -7,7 +7,7 @@ DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 _ACTIVITY_FILE = DATA_DIR / "activity.json"
 _MAX_ENTRIES = 2000
 
-CATEGORIES = ["auth", "nginx", "config", "ssl", "backup", "node", "user", "proxy"]
+CATEGORIES = ["auth", "nginx", "config", "ssl", "backup", "node", "user", "proxy", "audit"]
 
 
 def _load() -> list[dict]:

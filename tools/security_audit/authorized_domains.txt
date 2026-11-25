@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# AUTHORIZED SCAN TARGETS
+#
+# List ONLY hosts your organization owns or has written authorization to test.
+# One host per line. Lines starting with # and blank lines are ignored.
+#
+# Allowed:     example.com    www.example.com    203.0.113.10    staging.example.com:8443
+# Rejected:    https://example.com   example.com/path   *.example.com   10.0.0.0/24
+#
+# The scanner refuses to run while this file has no uncommented entries.
+# Uncomment / add your hosts below:
+# ---------------------------------------------------------------------------
+
+# laobullionbank.com
+# www.laobullionbank.com

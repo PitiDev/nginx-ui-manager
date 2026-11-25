@@ -1,0 +1,458 @@
+{% extends "base.html" %}
+{% block title %}External Audit — Nginx UI{% endblock %}
+{% block page_title %}External Security Audit{% endblock %}
+
+{% block content %}
+{% set is_admin = current_user and current_user.role == 'admin' %}
+
+<p class="text-sm text-gray-500 mb-5 max-w-4xl">
+    Read-only checks of your public sites from the outside: exposed <code class="text-xs bg-gray-100 px-1 rounded">.env</code> / <code class="text-xs bg-gray-100 px-1 rounded">.git</code> files,
+    HTTP security headers and TLS certificate health. Only hosts in the scope list are ever contacted.
+</p>
+
+<div class="grid grid-cols-1 xl:grid-cols-5 gap-5 mb-6">
+
+    <!-- ── Run scan ─────────────────────────────────────────────────────── -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 xl:col-span-2 flex flex-col">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="w-9 h-9 rounded-xl bg-nginx-light flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-nginx" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z"/>
+                </svg>
+            </div>
+            <div class="min-w-0">
+                <h2 class="text-sm font-semibold text-gray-800">Run scan</h2>
+                <p class="text-xs text-gray-500">One scan at a time · results are saved below</p>
+            </div>
+        </div>
+
+        <dl class="grid grid-cols-3 gap-3 mb-4">
+            <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5">
+                <dt class="text-xs text-gray-500">Hosts in scope</dt>
+                <dd class="text-lg font-semibold text-gray-800 tabular-nums">{{ scope.hosts|length }}</dd>
+            </div>
+            <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5">
+                <dt class="text-xs text-gray-500">Requests</dt>
+                <dd class="text-lg font-semibold text-gray-800 tabular-nums">~{{ scope.requests }}</dd>
+            </div>
+            <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5">
+                <dt class="text-xs text-gray-500">Est. time</dt>
+                <dd class="text-lg font-semibold text-gray-800 tabular-nums">≥ {{ scope.min_seconds }}s</dd>
+            </div>
+        </dl>
+
+        <!-- idle -->
+        <div id="run-idle">
+            {% if is_admin %}
+            <button id="btn-run" type="button" {% if not scope.hosts or scope.error %}disabled{% endif %}
+                    class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-nginx text-white text-sm font-medium rounded-lg hover:bg-nginx-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                Run scan now
+            </button>
+            {% if not scope.hosts %}
+            <p class="text-xs text-gray-500 mt-2">Add at least one host to the scope list to enable scanning.</p>
+            {% endif %}
+            {% else %}
+            <p class="text-xs text-gray-500">Admin access required to run scans. You can view all saved reports below.</p>
+            {% endif %}
+        </div>
+
+        <!-- running -->
+        <div id="run-active" class="hidden">
+            <div class="flex items-center justify-between text-xs text-gray-600 mb-1.5">
+                <span class="inline-flex items-center gap-2 font-medium text-gray-800">
+                    <span class="w-2 h-2 rounded-full bg-nginx animate-pulse"></span>
+                    Scanning <span id="run-count" class="tabular-nums"></span>
+                </span>
+                <span id="run-elapsed" class="tabular-nums text-gray-500"></span>
+            </div>
+            <div class="h-2 rounded-full bg-gray-100 overflow-hidden mb-2">
+                <div id="run-bar" class="h-full bg-nginx rounded-full transition-all duration-500" style="width:0%"></div>
+            </div>
+            <p id="run-current" class="text-xs text-gray-500 font-mono truncate mb-3"></p>
+            {% if is_admin %}
+            <button id="btn-cancel" type="button"
+                    class="w-full px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors">
+                Cancel scan
+            </button>
+            {% endif %}
+        </div>
+
+        <div id="run-msg" class="hidden mt-3 px-3 py-2 rounded-lg text-xs font-medium border"></div>
+        <ul id="run-hosts" class="mt-3 space-y-1 max-h-48 overflow-y-auto"></ul>
+
+        <div class="mt-auto pt-4 border-t border-gray-100 text-xs text-gray-500 space-y-1">
+            <p>Limits: 2 concurrent · 500 ms between requests · 10 s timeout · GET only</p>
+            <p class="font-mono text-[11px] text-gray-400 break-all" title="User-Agent sent with every request">{{ user_agent }}</p>
+        </div>
+    </div>
+
+    <!-- ── Scope ─────────────────────────────────────────────────────────── -->
+    <form method="post" action="/audit/scope" class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 xl:col-span-3 flex flex-col">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+            </div>
+            <div class="min-w-0 flex-1">
+                <h2 class="text-sm font-semibold text-gray-800">Authorized scope</h2>
+                <p class="text-xs text-gray-500">Only list hosts your organization owns or has written permission to test.</p>
+            </div>
+            {% if is_admin %}
+            <button id="btn-suggest" type="button"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors flex-shrink-0">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                Suggest from Nginx configs
+            </button>
+            {% endif %}
+        </div>
+
+        {% if is_admin %}
+        <div id="suggest-box" class="hidden mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <div class="flex items-center justify-between mb-2">
+                <p class="text-xs font-medium text-blue-800">Hostnames from <code>server_name</code> in this node's enabled sites</p>
+                <button type="button" id="suggest-close" class="text-blue-500 hover:text-blue-700 text-xs">Close</button>
+            </div>
+            <div id="suggest-list" class="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-800 mb-2"></div>
+            <div class="flex items-center gap-2">
+                <button type="button" id="suggest-add" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700">Add selected</button>
+                <span class="text-xs text-blue-700">Review the list, then Save scope.</span>
+            </div>
+        </div>
+        {% endif %}
+
+        <textarea name="scope" id="scope-text" rows="10" spellcheck="false" {% if not is_admin %}readonly{% endif %}
+                  class="w-full flex-1 min-h-[180px] text-sm font-mono border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent {% if not is_admin %}bg-gray-50 text-gray-600{% endif %}">{{ scope.text }}</textarea>
+        {% if scope.error %}
+        <p class="mt-2 text-xs text-red-600">{{ scope.error }}</p>
+        {% endif %}
+        <p class="mt-1.5 text-xs text-gray-400">One host per line · <code>#</code> comments · allowed: <code>example.com</code>, <code>203.0.113.10</code>, <code>host:8443</code> · rejected: URLs, paths, wildcards, CIDR</p>
+
+        <div class="mt-4 flex flex-wrap items-end gap-3">
+            <label class="flex-1 min-w-[200px]">
+                <span class="block text-xs font-medium text-gray-600 mb-1">Contact in User-Agent <span class="text-gray-400">(optional)</span></span>
+                <input type="text" name="contact" maxlength="100" value="{{ settings.contact }}" placeholder="e.g. secops team / ticket ref"
+                       {% if not is_admin %}readonly{% endif %}
+                       class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+            </label>
+            <label class="w-36">
+                <span class="block text-xs font-medium text-gray-600 mb-1">Cert warning (days)</span>
+                <input type="number" name="expiry_days" min="1" max="365" value="{{ settings.expiry_days }}"
+                       {% if not is_admin %}readonly{% endif %}
+                       class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-nginx focus:border-transparent">
+            </label>
+            {% if is_admin %}
+            <button type="submit"
+                    class="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors">
+                Save scope
+            </button>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<!-- ── Report ─────────────────────────────────────────────────────────────── -->
+<section id="report-section">
+    <div class="flex flex-wrap items-center gap-3 mb-4">
+        <h2 class="text-base font-semibold text-gray-800 mr-auto">Report</h2>
+        <select id="report-select" aria-label="Choose report"
+                class="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-nginx max-w-full"></select>
+        <a id="btn-open" target="_blank" rel="noopener"
+           class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            Full report
+        </a>
+        <a id="btn-json"
+           class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            JSON
+        </a>
+        {% if is_admin %}
+        <form id="delete-form" method="post" onsubmit="return confirm('Delete this report permanently?')">
+            <button type="submit" class="px-3 py-2 text-sm font-medium rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50">Delete</button>
+        </form>
+        {% endif %}
+    </div>
+
+    <div id="report-empty" class="hidden bg-white rounded-xl border border-dashed border-gray-300 p-10 text-center">
+        <p class="text-sm font-medium text-gray-700">No reports yet</p>
+        <p class="text-xs text-gray-500 mt-1">Add your hosts to the scope list and run a scan.</p>
+    </div>
+
+    <div id="report-body" class="hidden">
+        <p id="report-meta" class="text-xs text-gray-500 mb-3"></p>
+        <div id="cards" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5"></div>
+
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+            <div id="chips" class="flex flex-wrap gap-2"></div>
+            <select id="f-domain" aria-label="Filter by domain" class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-nginx"></select>
+            <input id="f-q" type="search" placeholder="Search findings…" aria-label="Search findings"
+                   class="flex-1 min-w-[180px] text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-nginx">
+            <span id="shown" class="text-xs text-gray-500 tabular-nums"></span>
+        </div>
+
+        <div id="groups" class="space-y-4"></div>
+    </div>
+</section>
+
+<script>
+(function () {
+    "use strict";
+    const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+    let REPORTS = {{ reports | tojson }};
+    const INITIAL_JOB = {{ job | tojson }};
+    const SEVS = ["CRITICAL", "MEDIUM", "LOW", "PASS"];
+    const SEV_CLS = {
+        CRITICAL: "bg-red-50 text-red-700 ring-red-200",
+        MEDIUM:   "bg-amber-50 text-amber-700 ring-amber-200",
+        LOW:      "bg-sky-50 text-sky-700 ring-sky-200",
+        PASS:     "bg-emerald-50 text-emerald-700 ring-emerald-200",
+        ERROR:    "bg-gray-100 text-gray-600 ring-gray-200",
+    };
+    const SEV_DOT = { CRITICAL: "bg-red-500", MEDIUM: "bg-amber-500", LOW: "bg-sky-500", PASS: "bg-emerald-500", ERROR: "bg-gray-400" };
+    const $ = (id) => document.getElementById(id);
+
+    function h(tag, attrs, ...kids) {
+        const el = document.createElement(tag);
+        for (const [k, v] of Object.entries(attrs || {})) {
+            if (v == null || v === false) continue;
+            if (k === "class") el.className = v;
+            else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+            else el.setAttribute(k, v === true ? "" : v);
+        }
+        for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+        return el;
+    }
+    function richText(str) {  // `code` spans without innerHTML
+        const out = []; const re = /`([^`]+)`/g; let last = 0, m;
+        while ((m = re.exec(str))) {
+            out.push(str.slice(last, m.index), h("code", { class: "text-xs bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-mono" }, m[1]));
+            last = re.lastIndex;
+        }
+        out.push(str.slice(last)); return out;
+    }
+    const badge = (sev) => h("span", { class: "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold tracking-wide ring-1 " + SEV_CLS[sev] },
+        h("span", { class: "w-1.5 h-1.5 rounded-full " + SEV_DOT[sev] }), sev);
+    const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? (iso || "") : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); };
+
+    // ── Report picker ────────────────────────────────────────────────────────
+    let current = null;
+    const state = { sev: new Set(["CRITICAL", "MEDIUM", "LOW"]), domain: "", q: "" };
+    const open = new Set();
+
+    function fillSelect(selectedId) {
+        const sel = $("report-select"); sel.replaceChildren();
+        REPORTS.forEach((r) => {
+            const s = r.summary || {};
+            sel.append(h("option", { value: r.id }, fmtDate(r.generated_at) + "  ·  " + (s.critical || 0) + " critical, " + (s.warnings || 0) + " warnings"));
+        });
+        if (selectedId) sel.value = selectedId;
+        $("report-empty").classList.toggle("hidden", REPORTS.length > 0);
+        sel.classList.toggle("hidden", !REPORTS.length);
+        ["btn-open", "btn-json", "delete-form"].forEach((id) => $(id) && $(id).classList.toggle("hidden", !REPORTS.length));
+        if (!REPORTS.length) $("report-body").classList.add("hidden");
+    }
+    $("report-select").addEventListener("change", (e) => loadReport(e.target.value));
+
+    async function loadReport(id) {
+        if (!id) return;
+        const r = await fetch("/api/audit/reports/" + encodeURIComponent(id));
+        if (!r.ok) return;
+        current = await r.json();
+        current.id = id;
+        open.clear();
+        $("btn-open").href = "/audit/reports/" + id + "/html";
+        $("btn-json").href = "/audit/reports/" + id + "/json";
+        if ($("delete-form")) $("delete-form").action = "/audit/reports/" + id + "/delete";
+        const fd = $("f-domain"); fd.replaceChildren(h("option", { value: "" }, "All domains"));
+        current.domains.forEach((d) => fd.append(h("option", { value: d.domain }, d.domain)));
+        state.domain = "";
+        renderSummary(); renderChips(); renderGroups();
+        $("report-body").classList.remove("hidden");
+        history.replaceState(null, "", "/audit?report=" + encodeURIComponent(id));
+    }
+
+    function renderSummary() {
+        const s = current.summary;
+        $("report-meta").textContent = "Generated " + fmtDate(current.generated_at) +
+            (current.started_by ? " by " + current.started_by : "") +
+            " · " + current.duration_seconds + "s · " + current.request_count + " requests";
+        const card = (label, value, sub, tone) => h("div", { class: "bg-white rounded-xl border border-gray-200 shadow-sm p-4 border-l-4 " + tone[0] },
+            h("p", { class: "text-xs font-medium text-gray-500" }, label),
+            h("p", { class: "text-3xl font-semibold mt-1 tabular-nums " + (value ? tone[1] : "text-gray-800") }, value),
+            h("p", { class: "text-xs text-gray-400 mt-1" }, sub));
+        $("cards").replaceChildren(
+            card("Domains scanned", s.total_domains, s.total_checks + " checks run", ["border-l-gray-300", "text-gray-800"]),
+            card("Critical issues", s.critical, s.domains_with_critical ? s.domains_with_critical + " domain(s) affected" : "None found", ["border-l-red-500", "text-red-600"]),
+            card("Warnings", s.warnings, s.medium + " medium · " + s.low + " low", ["border-l-amber-500", "text-amber-600"]),
+            card("Passed checks", s.passed, s.total_checks ? Math.round(s.passed / s.total_checks * 100) + "% of all checks" : "—", ["border-l-emerald-500", "text-emerald-600"])
+        );
+    }
+
+    function renderChips() {
+        const tot = { CRITICAL: current.summary.critical, MEDIUM: current.summary.medium, LOW: current.summary.low, PASS: current.summary.passed };
+        $("chips").replaceChildren(...SEVS.map((s) => {
+            const on = state.sev.has(s);
+            return h("button", {
+                type: "button", "aria-pressed": String(on),
+                class: "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors " +
+                    (on ? "bg-white border-gray-300 text-gray-800 shadow-sm" : "bg-gray-50 border-gray-200 text-gray-400"),
+                onclick: () => { on ? state.sev.delete(s) : state.sev.add(s); renderChips(); renderGroups(); },
+            }, h("span", { class: "w-2 h-2 rounded-full " + SEV_DOT[s] + (on ? "" : " opacity-40") }), s, h("span", { class: "font-normal tabular-nums" }, tot[s]));
+        }));
+    }
+    $("f-domain").addEventListener("change", (e) => { state.domain = e.target.value; renderGroups(); });
+    $("f-q").addEventListener("input", (e) => { state.q = e.target.value.trim().toLowerCase(); renderGroups(); });
+
+    function fixPanel(f) {
+        const r = f.remediation, langs = Object.keys(r.snippets || {});
+        const box = h("div", { class: "border-l-2 pl-4 " + (f.severity === "CRITICAL" ? "border-red-400" : f.severity === "MEDIUM" ? "border-amber-400" : "border-sky-400") },
+            h("p", { class: "text-sm font-semibold text-gray-800 mb-2" }, r.summary),
+            r.steps.length ? h("ol", { class: "list-decimal pl-5 space-y-1 text-sm text-gray-700 mb-3" }, r.steps.map((s) => h("li", null, richText(s)))) : null);
+        if (langs.length) {
+            const pre = h("pre", { class: "text-[12.5px] leading-relaxed bg-slate-900 text-slate-100 rounded-b-lg rounded-tr-lg p-4 overflow-x-auto font-mono" });
+            const tabs = h("div", { class: "flex gap-1" });
+            const show = (lang) => {
+                pre.textContent = r.snippets[lang];
+                tabs.querySelectorAll("button").forEach((b) => {
+                    const sel = b.dataset.lang === lang;
+                    b.className = "px-3 py-1.5 text-xs font-semibold rounded-t-lg " + (sel ? "bg-slate-900 text-white" : "text-gray-500 hover:text-gray-800");
+                });
+            };
+            langs.forEach((lang) => tabs.append(h("button", { type: "button", "data-lang": lang, onclick: () => show(lang) }, lang === "nginx" ? "Nginx" : lang === "apache" ? "Apache" : lang)));
+            const copy = h("button", { type: "button", class: "absolute top-2 right-2 px-2 py-1 text-[11px] font-medium rounded bg-slate-700 text-slate-200 hover:bg-slate-600",
+                onclick: (e) => { const b = e.currentTarget; navigator.clipboard && navigator.clipboard.writeText(pre.textContent).then(() => { b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy", 1400); }); } }, "Copy");
+            box.append(tabs, h("div", { class: "relative" }, pre, copy));
+            show(langs[0]);
+        }
+        if (r.note) box.append(h("p", { class: "mt-3 text-xs text-gray-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" }, richText(r.note)));
+        return box;
+    }
+
+    function renderGroups() {
+        const root = $("groups"); root.replaceChildren();
+        let shown = 0, total = 0;
+        current.domains.forEach((d) => {
+            total += d.findings.length;
+            if (state.domain && d.domain !== state.domain) return;
+            const rows = [];
+            d.findings.forEach((f, i) => {
+                const hay = [d.domain, f.title, f.check, f.detail, f.url, f.category, f.http_status].join(" ").toLowerCase();
+                if (!state.sev.has(f.severity) || (state.q && !hay.includes(state.q))) return;
+                shown++;
+                const key = d.domain + "#" + i, isOpen = open.has(key);
+                rows.push(h("tr", { class: "border-t border-gray-100 align-top" + (f.severity === "PASS" ? " text-gray-500" : "") },
+                    h("td", { class: "px-4 py-3 w-28" }, badge(f.severity)),
+                    h("td", { class: "px-4 py-3 w-36 text-xs text-gray-500 hidden md:table-cell" }, f.category),
+                    h("td", { class: "px-4 py-3" },
+                        h("p", { class: "text-sm font-medium " + (f.severity === "PASS" ? "text-gray-600" : "text-gray-800") }, f.title),
+                        h("p", { class: "text-xs font-mono text-gray-400 break-all" }, f.url ? f.check + " — " + f.url : f.check),
+                        f.detail ? h("p", { class: "text-xs text-gray-500 mt-1" }, f.detail) : null),
+                    h("td", { class: "px-4 py-3 w-16 text-xs font-mono text-gray-400 text-right hidden sm:table-cell" }, f.http_status != null ? f.http_status : "—"),
+                    h("td", { class: "px-4 py-3 w-28 text-right" }, f.remediation ? h("button", {
+                        type: "button", class: "text-xs font-semibold text-nginx hover:text-nginx-dark whitespace-nowrap", "aria-expanded": String(isOpen),
+                        onclick: () => { isOpen ? open.delete(key) : open.add(key); renderGroups(); },
+                    }, isOpen ? "Hide fix ▾" : "How to fix ▸") : null)));
+                if (isOpen && f.remediation) rows.push(h("tr", { class: "bg-gray-50" }, h("td", { colspan: "5", class: "px-4 py-4" }, fixPanel(f))));
+            });
+            const counts = h("div", { class: "flex flex-wrap gap-1.5 ml-auto" }, SEVS.map((s) =>
+                h("span", { class: "px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums " + (d.counts[s] ? SEV_CLS[s] + " ring-1" : "text-gray-300 ring-1 ring-gray-100") }, d.counts[s] + " " + s.toLowerCase())));
+            root.append(h("div", { class: "bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden" },
+                h("div", { class: "flex flex-wrap items-center gap-3 px-4 py-3 bg-gray-50/60" },
+                    badge(d.worst), h("h3", { class: "text-sm font-semibold font-mono text-gray-800" }, d.domain), counts),
+                d.notes.length ? h("div", { class: "px-4 py-2 text-xs text-gray-500 border-t border-gray-100 space-y-0.5" }, d.notes.map((n) => h("p", null, "ⓘ " + n))) : null,
+                rows.length ? h("table", { class: "w-full" }, h("tbody", null, rows))
+                            : h("p", { class: "px-4 py-3 text-xs text-gray-400 border-t border-gray-100" }, "No findings at the selected severities.")));
+        });
+        $("shown").textContent = shown + " of " + total + " findings";
+    }
+
+    // ── Scan job ─────────────────────────────────────────────────────────────
+    let pollTimer = null;
+    function showMsg(text, tone) {
+        const el = $("run-msg");
+        el.className = "mt-3 px-3 py-2 rounded-lg text-xs font-medium border " +
+            ({ ok: "bg-green-50 text-green-800 border-green-200", err: "bg-red-50 text-red-800 border-red-200", info: "bg-gray-50 text-gray-700 border-gray-200" }[tone]);
+        el.textContent = text;
+    }
+    function renderHosts(hosts) {
+        $("run-hosts").replaceChildren(...(hosts || []).map((x) => h("li", { class: "flex items-center gap-2 text-xs" },
+            badge(x.worst), h("span", { class: "font-mono text-gray-700 truncate" }, x.domain),
+            x.counts ? h("span", { class: "ml-auto text-gray-400 tabular-nums whitespace-nowrap" }, [["CRITICAL", "critical"], ["MEDIUM", "medium"], ["LOW", "low"]].filter(([k]) => x.counts[k]).map(([k, n]) => x.counts[k] + " " + n).join(" · ") || "all passed") :
+                       h("span", { class: "ml-auto text-gray-400 truncate", title: x.error }, "error"))));
+    }
+    function renderJob(job, fromPoll) {
+        const running = job.state === "running";
+        $("run-idle").classList.toggle("hidden", running);
+        $("run-active").classList.toggle("hidden", !running);
+        if (running) {
+            $("run-count").textContent = job.done + " / " + job.total + " hosts";
+            $("run-bar").style.width = (job.total ? Math.max(4, job.done / job.total * 100) : 0) + "%";
+            $("run-elapsed").textContent = Math.round(job.elapsed || 0) + "s · started by " + job.started_by;
+            $("run-current").textContent = job.current.length ? "→ " + job.current.join(", ") : "";
+            renderHosts(job.hosts);
+        } else if (fromPoll) {
+            renderHosts(job.hosts);
+            if (job.state === "done") showMsg("Scan finished in " + job.duration + "s: " + job.summary.critical + " critical, " + job.summary.warnings + " warnings.", job.summary.critical ? "err" : "ok");
+            else if (job.state === "cancelled") showMsg("Scan cancelled. No report was saved.", "info");
+            else if (job.state === "error") showMsg("Scan failed: " + job.error, "err");
+        }
+    }
+    async function poll() {
+        const r = await fetch("/api/audit/status");
+        const job = await r.json();
+        renderJob(job, true);
+        if (job.state === "running") { pollTimer = setTimeout(poll, 1500); return; }
+        pollTimer = null;
+        if (job.state === "done") {
+            REPORTS = await (await fetch("/api/audit/reports")).json();
+            fillSelect(job.report); loadReport(job.report);
+        }
+    }
+    if ($("btn-run")) $("btn-run").addEventListener("click", async () => {
+        $("run-msg").classList.add("hidden");
+        const r = await fetch("/api/audit/run", { method: "POST" });
+        const d = await r.json().catch(() => ({ ok: false, msg: "Unexpected response" }));
+        if (!d.ok) { showMsg(d.msg, "err"); return; }
+        renderHosts([]);
+        if (!pollTimer) poll();
+    });
+    if ($("btn-cancel")) $("btn-cancel").addEventListener("click", async () => {
+        $("btn-cancel").disabled = true; $("btn-cancel").textContent = "Cancelling…";
+        await fetch("/api/audit/cancel", { method: "POST" });
+    });
+
+    // ── Scope suggestions ─────────────────────────────────────────────────────
+    if ($("btn-suggest")) {
+        const existing = () => new Set($("scope-text").value.split("\n").map((l) => l.split("#")[0].trim().toLowerCase()).filter(Boolean));
+        $("btn-suggest").addEventListener("click", async () => {
+            const d = await (await fetch("/api/audit/suggest")).json();
+            const have = existing(), fresh = d.hosts.filter((x) => !have.has(x));
+            const list = $("suggest-list"); list.replaceChildren();
+            if (!fresh.length) list.append(h("span", { class: "text-gray-500" }, d.hosts.length ? "Every server_name is already in the list." : "No server_name entries found in enabled sites."));
+            fresh.forEach((x) => list.append(h("label", { class: "inline-flex items-center gap-1.5 font-mono" }, h("input", { type: "checkbox", value: x, checked: true, class: "rounded" }), x)));
+            $("suggest-add").classList.toggle("hidden", !fresh.length);
+            $("suggest-box").classList.remove("hidden");
+        });
+        $("suggest-close").addEventListener("click", () => $("suggest-box").classList.add("hidden"));
+        $("suggest-add").addEventListener("click", () => {
+            const picked = [...$("suggest-list").querySelectorAll("input:checked")].map((i) => i.value);
+            if (!picked.length) return;
+            const ta = $("scope-text");
+            ta.value = ta.value.replace(/\s*$/, "\n") + "\n# Added from Nginx server_name\n" + picked.join("\n") + "\n";
+            $("suggest-box").classList.add("hidden");
+            ta.focus();
+        });
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    const wanted = new URLSearchParams(location.search).get("report");
+    const first = REPORTS.find((r) => r.id === wanted) ? wanted : (REPORTS[0] && REPORTS[0].id);
+    fillSelect(first);
+    if (first) loadReport(first);
+    renderJob(INITIAL_JOB, false);
+    if (INITIAL_JOB.state === "running") poll();
+})();
+</script>
+{% endblock %}

@@ -23,6 +23,7 @@ RUN echo "geoip refresh ${GEOIP_REFRESH}" && python /tmp/fetch_geoip.py /app/geo
 
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
+COPY tools/security_audit/ ./tools/security_audit/
 
 EXPOSE 8080
 

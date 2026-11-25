@@ -17,3 +17,8 @@ __pycache__/
 
 # GeoIP database (downloaded by scripts/fetch_geoip.py)
 geoip/
+
+# Security audit output (contains findings about our infrastructure)
+tools/security_audit/reports/
+security-report-*.json
+security-report-*.html
